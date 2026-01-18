@@ -348,6 +348,21 @@ if (opcion === '2' && update.qr === undefined) {
 console.log(`\x1b[1m\x1b[92m[ ✿ ]  Conectado a: ${userName}\x1b[0m`)
   }
 
+    const restarterFile = "./lastRestarter.json"
+    if (fs.existsSync(restarterFile)) {
+      try {
+        const data = JSON.parse(fs.readFileSync(restarterFile, "utf-8"))
+        if (data.chatId) {
+          await conn.sendMessage(data.chatId, { text: "✅ *Angel bot está en línea nuevamente* 🚀" })
+          console.log(chalk.yellow("📢 Aviso enviado al grupo del reinicio."))
+          fs.unlinkSync(restarterFile)
+        }
+      } catch (error) {
+        console.error("❌ Error leyendo lastRestarter.json:", error)
+      }
+    }
+  }
+
   let reason = lastDisconnect?.error?.output?.statusCode 
           || lastDisconnect?.error?.statusCode
           || lastDisconnect?.error?.code
