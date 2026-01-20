@@ -12,8 +12,9 @@ const handler = async (m, { conn }) => {
   await conn.groupLeave(m.chat)
 }
 
-handler.command = /^salir$/i
+handler.help = ['𝖲𝖺𝗅𝗂𝗋']
+handler.tags = ['𝖮𝖶𝖭𝖤𝖱']
+handler.command = /^(salir)$/i
 handler.group = true
 handler.owner = true
-
 export default handler
