@@ -24,7 +24,8 @@ const handler = async (m, { conn, args }) => {
   }
 }
 
-handler.command = /^(nombrebot|setnamebot|cambianombre)$/i
+handler.help = ['𝖲𝖾𝗍𝗇𝖺𝗆𝖾𝖻𝗈𝗍 <𝖳𝖾𝗑𝗍𝗈>']
+handler.tags = ['𝖮𝖶𝖭𝖤𝖱']
+handler.command = ['setnamebot', 'namebot', 'cambiarnamebot']
 handler.owner = true
-
 export default handler
