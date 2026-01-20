@@ -24,6 +24,9 @@ export default async function (m, { conn, isAdmin }) {
   }
 }
 
-export const command = ['autoadmin']
-export const owner = true
-export const group = true
+handler.help = ['𝖠𝗎𝗍𝗈𝖺𝖽𝗆𝗂𝗇']
+handler.tags = ['𝖮𝖶𝖭𝖤𝖱']
+handler.command = ['autoadmin'];
+handler.owner = true;
+handler.group = true;
+export default handler;
