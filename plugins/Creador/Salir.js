@@ -14,7 +14,7 @@ const handler = async (m, { conn }) => {
 
 handler.help = ['𝖲𝖺𝗅𝗂𝗋']
 handler.tags = ['𝖮𝖶𝖭𝖤𝖱']
-handler.command = /^(salir)$/i
+handler.command = ["salir"];
 handler.group = true
 handler.owner = true
 export default handler
