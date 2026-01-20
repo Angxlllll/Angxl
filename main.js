@@ -131,6 +131,27 @@ async function connectionUpdate(update) {
     console.log(chalk.greenBright(`[ ✿ ] Conectado a ${conn.user?.name || 'Bot'}`))
   }
 
+const restarterFile = './lastRestarter.json'
+if (fs.existsSync(restarterFile)) {
+  try {
+    const data = JSON.parse(fs.readFileSync(restarterFile, 'utf-8'))
+    if (data.chatId) {
+      await conn.sendMessage(data.chatId, {
+        text: `✅ *${global.namebot || 'Bot'} está en línea nuevamente* 🚀`
+      })
+      console.log(
+        chalk.yellow('📢 Aviso enviado al grupo del reinicio.')
+      )
+    }
+    fs.unlinkSync(restarterFile)
+  } catch (err) {
+    console.error(
+      '❌ Error leyendo lastRestarter.json:',
+      err
+    )
+  }
+}
+
   if (connection === 'close') {
     if (reason !== DisconnectReason.loggedOut) {
       await reloadHandler(true)
