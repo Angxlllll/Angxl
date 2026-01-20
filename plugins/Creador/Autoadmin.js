@@ -1,4 +1,4 @@
-export default async function (m, { conn, isAdmin }) {
+const handler = async (m, { conn, isAdmin }) => {
   if (isAdmin) {
     return m.reply('*𝖸𝖺 𝖤𝗋𝖾𝗌 𝖠𝖽𝗆𝗂𝗇 𝖩𝖾𝖿𝖾*')
   }
