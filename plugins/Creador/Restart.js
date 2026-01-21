@@ -11,8 +11,7 @@ const handler = async (m, { conn }) => {
   await conn.sendMessage(
     chatId,
     {
-      text: `🔄 *${global.namebot} se reiniciará en unos segundos...*`,
-      ...global.rcanal
+      text: `🔄 *${global.namebot} se reiniciará en unos segundos...*`
     },
     { quoted: m }
   )
