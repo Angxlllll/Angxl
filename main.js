@@ -9,7 +9,6 @@ import { createRequire } from 'module'
 import readline from 'readline'
 import NodeCache from 'node-cache'
 import chalk from 'chalk'
-import { filesInit } from './lib/plugins.js'
 import pino from 'pino'
 import yargs from 'yargs'
 import syntaxerror from 'syntax-error'
@@ -129,24 +128,8 @@ async function connectionUpdate(update) {
   const reason = lastDisconnect?.error?.output?.statusCode
 
   if (connection === 'open') {
-  console.log(chalk.greenBright(`[ ✿ ] Conectado a ${conn.user?.name || 'Bot'}`))
-
-  const restarterFile = './lastRestarter.json'
-  if (fs.existsSync(restarterFile)) {
-    try {
-      const data = JSON.parse(fs.readFileSync(restarterFile, 'utf-8'))
-      if (data?.chatId) {
-        await conn.sendMessage(data.chatId, {
-          text: `✅ *${global.namebot} está en línea nuevamente* 🚀`
-        })
-        console.log(chalk.yellow('📢 Aviso de reinicio enviado correctamente.'))
-      }
-      fs.unlinkSync(restarterFile)
-    } catch (err) {
-      console.error('❌ Error procesando lastRestarter.json:', err)
-    }
+    console.log(chalk.greenBright(`[ ✿ ] Conectado a ${conn.user?.name || 'Bot'}`))
   }
-}
 
   if (connection === 'close') {
     if (reason !== DisconnectReason.loggedOut) {
@@ -186,7 +169,41 @@ async function reloadHandler(restart) {
 }
 
 await reloadHandler()
-await filesInit(undefined, conn)
+
+const pluginRoot = path.join(__dirname, 'plugins')
+global.plugins = {}
+
+function loadPlugins(dir) {
+  for (const f of fs.readdirSync(dir)) {
+    const full = path.join(dir, f)
+    if (fs.statSync(full).isDirectory()) loadPlugins(full)
+    else if (f.endsWith('.js')) {
+      import(`${full}?update=${Date.now()}`)
+        .then(m => global.plugins[full] = m.default || m)
+        .catch(() => { })
+    }
+  }
+}
+
+loadPlugins(pluginRoot)
+
+fs.watch(pluginRoot, async (_, file) => {
+  if (!file?.endsWith('.js')) return
+  const full = path.join(pluginRoot, file)
+  if (!fs.existsSync(full)) return delete global.plugins[file]
+
+  const err = syntaxerror(fs.readFileSync(full), file, {
+    sourceType: 'module',
+    allowAwaitOutsideFunction: true
+  })
+
+  if (err) return
+
+  try {
+    const m = await import(`${full}?update=${Date.now()}`)
+    global.plugins[file] = m.default || m
+  } catch { }
+})
 
 setInterval(() => {
   if (!conn?.user) return
