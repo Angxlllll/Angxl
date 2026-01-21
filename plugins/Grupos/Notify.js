@@ -1,13 +1,14 @@
 const handler = async (m, { conn, args, participants }) => {
   let message = null
-  let type = null
+  let options = {}
 
   if (m.quoted) {
     if (m.quoted.text) {
       message = { text: m.quoted.text }
+      options.quoted = m.quoted
     } else {
       const buffer = await m.quoted.download()
-      type = m.quoted.mtype.replace('Message', '')
+      const type = m.quoted.mtype.replace('Message', '')
       message = { [type]: buffer }
     }
   }
@@ -28,14 +29,18 @@ const handler = async (m, { conn, args, participants }) => {
     react: { text: '📢', key: m.key }
   })
 
-  await conn.sendMessage(m.chat, {
-    ...message,
-    mentions: participants.map(p => p.id),
-    contextInfo: {
-      forwardingScore: 1,
-      isForwarded: true
-    }
-  })
+  await conn.sendMessage(
+    m.chat,
+    {
+      ...message,
+      mentions: participants.map(p => p.id),
+      contextInfo: {
+        forwardingScore: 1,
+        isForwarded: true
+      }
+    },
+    options
+  )
 }
 
 handler.command = ['n', 'tag', 'notify']
