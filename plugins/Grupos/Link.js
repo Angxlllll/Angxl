@@ -5,9 +5,11 @@ import {
 } from "@whiskeysockets/baileys"
 
 const handler = async (m, { conn }) => {
-  await m.react("🔗")
-
   const chat = m.chat
+
+  await conn.sendMessage(chat, {
+    react: { text: "🔗", key: m.key }
+  })
 
   const safeFetch = async (url, timeout = 5000) => {
     const controller = new AbortController()
@@ -22,79 +24,88 @@ const handler = async (m, { conn }) => {
     }
   }
 
-  let inviteCode
   try {
-    inviteCode = await conn.groupInviteCode(chat)
-  } catch {
-    return
-  }
+    const meta = await conn.groupMetadata(chat)
+    const groupName = meta.subject || "Grupo"
 
-  const link = `https://chat.whatsapp.com/${inviteCode}`
+    let inviteCode = null
+    try {
+      inviteCode = await conn.groupInviteCode(chat)
+    } catch {}
 
-  let ppBuffer = null
-  try {
-    const url = await conn.profilePictureUrl(chat, "image")
-    ppBuffer = await safeFetch(url, 6000)
-  } catch {}
+    if (!inviteCode) return
 
-  if (!ppBuffer) {
-    ppBuffer = await safeFetch("https://files.catbox.moe/xr2m6u.jpg")
-  }
+    const link = `https://chat.whatsapp.com/${inviteCode}`
 
-  const meta = await conn.groupMetadata(chat)
-  const groupName = meta.subject || "Grupo"
+    const fallbackPP = "https://files.catbox.moe/xr2m6u.jpg"
+    let ppBuffer = null
 
-  const buttons = [
-    {
-      name: "cta_copy",
-      buttonParamsJson: JSON.stringify({
-        display_text: "𝗖𝗼𝗽𝗶𝗮𝗿 𝗘𝗻𝗹𝗮𝗰𝗲",
-        copy_code: link
-      })
+    try {
+      const url = await conn.profilePictureUrl(chat, "image").catch(() => null)
+      if (url) ppBuffer = await safeFetch(url, 6000)
+    } catch {}
+
+    if (!ppBuffer) {
+      ppBuffer = await safeFetch(fallbackPP)
     }
-  ]
 
-  const { imageMessage } = await generateWAMessageContent(
-    { image: ppBuffer },
-    { upload: conn.waUploadToServer }
-  )
+    const buttons = [
+      {
+        name: "cta_copy",
+        buttonParamsJson: JSON.stringify({
+          display_text: "𝗖𝗼𝗽𝗶𝗮𝗿 𝗘𝗻𝗹𝗮𝗰𝗲",
+          copy_code: link
+        })
+      }
+    ]
 
-  const interactive = generateWAMessageFromContent(
-    chat,
-    {
-      viewOnceMessage: {
-        message: {
-          interactiveMessage:
-            proto.Message.InteractiveMessage.fromObject({
-              header:
-                proto.Message.InteractiveMessage.Header.fromObject({
-                  title: `_*${groupName}*_`,
-                  hasMediaAttachment: true,
-                  imageMessage
-                }),
-              body:
-                proto.Message.InteractiveMessage.Body.fromObject({
-                  text: link
-                }),
+    const { imageMessage } = await generateWAMessageContent(
+      { image: ppBuffer },
+      { upload: conn.waUploadToServer }
+    )
+
+    const interactive = generateWAMessageFromContent(
+      chat,
+      {
+        viewOnceMessage: {
+          message: {
+            messageContextInfo: {
+              deviceListMetadata: {},
+              deviceListMetadataVersion: 2
+            },
+            interactiveMessage: proto.Message.InteractiveMessage.fromObject({
+              header: proto.Message.InteractiveMessage.Header.fromObject({
+                title: `_*${groupName}*_`,
+                hasMediaAttachment: true,
+                imageMessage
+              }),
+              body: proto.Message.InteractiveMessage.Body.create({
+                text: `${link}`
+              }),
               nativeFlowMessage:
                 proto.Message.InteractiveMessage.NativeFlowMessage.fromObject({
-                  buttons
+                  buttons,
+                  messageParamsJson: ""
                 })
             })
+          }
         }
-      }
-    },
-    { quoted: m }
-  )
+      },
+      { quoted: m }
+    )
 
-  await conn.relayMessage(chat, interactive.message, {
-    messageId: interactive.key.id
-  })
+    await conn.relayMessage(chat, interactive.message, {
+      messageId: interactive.key.id
+    })
+  } catch (err) {
+    console.error("⚠️ Error en comando .link:", err)
+  }
 }
 
-handler.help = ["link"]
-handler.tags = ["grupo"]
-handler.command = ["link"]
+handler.help = ["𝖫𝗂𝗇𝗄"]
+handler.tags = ["𝖦𝖱𝖴𝖯𝖮𝖲"]
+handler.customPrefix = /^\.?(link)$/i
+handler.command = new RegExp()
 handler.group = true
 
 export default handler
