@@ -10,7 +10,6 @@ import readline from 'readline'
 import NodeCache from 'node-cache'
 import chalk from 'chalk'
 import pino from 'pino'
-import * as Jimp from 'jimp';
 import yargs from 'yargs'
 import syntaxerror from 'syntax-error'
 import ws from 'ws'
