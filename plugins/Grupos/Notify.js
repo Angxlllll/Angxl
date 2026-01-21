@@ -37,20 +37,25 @@ function getQuoted(msg) {
 }
 
 const handler = async (m, { conn, args, participants = [] }) => {
-
-  let messageToSend = null
   const quoted = getQuoted(m)
+  const text = args.join(" ").trim()
+  let msg = null
 
+  // 🧠 CASO 1: Responde a algo
   if (quoted) {
     const type = getContentType(quoted)
 
-    if (type === 'conversation' || type === 'extendedTextMessage') {
-      messageToSend = {
+    // 👉 Texto citado
+    if (type === "conversation" || type === "extendedTextMessage") {
+      msg = {
         text:
           quoted.conversation ||
           quoted.extendedTextMessage?.text
       }
-    } else {
+    }
+
+    // 👉 Media citada
+    else {
       const stream = await downloadContentFromMessage(
         quoted[type],
         type.replace("Message", "")
@@ -59,31 +64,40 @@ const handler = async (m, { conn, args, participants = [] }) => {
       let buffer = Buffer.alloc(0)
       for await (const c of stream) buffer = Buffer.concat([buffer, c])
 
-      messageToSend = { [type.replace("Message", "")]: buffer }
+      msg = {
+        [type.replace("Message", "")]: buffer,
+        caption: text || undefined
+      }
     }
   }
 
-  if (!messageToSend && args.length) {
-    messageToSend = { text: args.join(" ") }
+  // 🧠 CASO 2: .n texto
+  if (!msg && text) {
+    msg = { text }
   }
 
-  if (!messageToSend) {
+  // ❌ Uso incorrecto
+  if (!msg) {
     return conn.sendMessage(
       m.chat,
       {
         text:
           "❌ *Uso incorrecto*\n\n" +
           "• `.n texto`\n" +
-          "• Responde a un mensaje con `.n`"
+          "• Responde a un mensaje con `.n texto`"
       },
       { quoted: m }
     )
   }
 
-  await conn.sendMessage(m.chat, {
-    ...messageToSend,
-    mentions: participants.map(p => p.id)
-  })
+  await conn.sendMessage(
+    m.chat,
+    {
+      ...msg,
+      mentions: participants.map(p => p.id)
+    },
+    { quoted: m }
+  )
 }
 
 handler.command = ["n", "tag", "notify"]
