@@ -1,45 +1,64 @@
-const handler = async (m, { conn, args, participants }) => {
-  let message = null
-  let options = {}
+import {
+  getContentType,
+  downloadContentFromMessage
+} from '@whiskeysockets/baileys'
 
-  if (m.quoted) {
-    if (m.quoted.text) {
-      message = { text: m.quoted.text }
-      options.quoted = m.quoted
+const handler = async (m, { conn, args, participants }) => {
+
+  let messageToSend = null
+  let quotedOption = null
+
+  const quoted =
+    m.quoted?.message ||
+    null
+
+  if (quoted) {
+    const type = getContentType(quoted)
+
+    if (type === 'conversation') {
+      messageToSend = { text: quoted.conversation }
+      quotedOption = { quoted: m.quoted }
+    } else if (type === 'extendedTextMessage') {
+      messageToSend = { text: quoted.extendedTextMessage.text }
+      quotedOption = { quoted: m.quoted }
     } else {
-      const buffer = await m.quoted.download()
-      const type = m.quoted.mtype.replace('Message', '')
-      message = { [type]: buffer }
+      const stream = await downloadContentFromMessage(
+        quoted[type],
+        type.replace('Message', '')
+      )
+
+      let buffer = Buffer.alloc(0)
+      for await (const c of stream) buffer = Buffer.concat([buffer, c])
+
+      messageToSend = { [type.replace('Message', '')]: buffer }
     }
   }
 
-  if (!message && args.length) {
-    message = { text: args.join(' ') }
+  if (!messageToSend && args.length) {
+    messageToSend = { text: args.join(' ') }
   }
 
-  if (!message) {
+  if (!messageToSend) {
     return m.reply(
-      "❌ *Uso incorrecto*\n\n" +
-      "• `.n texto`\n" +
-      "• Responde a un mensaje con `.n`"
+      '❌ *Uso incorrecto*\n\n' +
+      '• `.n texto`\n' +
+      '• Responde a un mensaje con `.n`'
     )
   }
 
-  await conn.sendMessage(m.chat, {
-    react: { text: '📢', key: m.key }
-  })
+  await m.react('🗣️')
 
   await conn.sendMessage(
     m.chat,
     {
-      ...message,
+      ...messageToSend,
       mentions: participants.map(p => p.id),
       contextInfo: {
         forwardingScore: 1,
         isForwarded: true
       }
     },
-    options
+    quotedOption
   )
 }
 
