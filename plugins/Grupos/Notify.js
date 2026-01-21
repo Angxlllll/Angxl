@@ -4,7 +4,7 @@ import {
 } from "@whiskeysockets/baileys"
 
 let thumb = null
-fetch('https://files.catbox.moe/tx6prq.jpg')
+fetch('https://files.catbox.moe/cfrof9.jpg')
   .then(r => r.arrayBuffer())
   .then(buf => thumb = Buffer.from(buf))
   .catch(() => null)
