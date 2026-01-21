@@ -1,33 +1,33 @@
 import fetch from "node-fetch"
 
-const handler = async (msg, { conn }) => {
-  const chatID = msg.key.remoteJid
-  const text = msg.text?.trim()
+const handler = async (m, { conn, args }) => {
+  const chatId = m.chat
+  const text = args.join(" ").trim()
 
   if (!text) {
     return conn.sendMessage(
-      chatID,
+      chatId,
       {
         text:
           "✳️ Uso correcto:\n\n" +
           ".bancheck <número>\n\n" +
-          "> Ejemplo: .bancheck 584125877491"
+          "> Ejemplo: .wa 584125877491"
       },
-      { quoted: msg }
+      { quoted: m }
     )
   }
 
   const cleanNumber = text.replace(/\D/g, "")
   if (cleanNumber.length < 8) {
     return conn.sendMessage(
-      chatID,
+      chatId,
       { text: "❌ Número inválido. Debe tener al menos 8 dígitos." },
-      { quoted: msg }
+      { quoted: m }
     )
   }
 
-  await conn.sendMessage(chatID, {
-    react: { text: "⏳", key: msg.key }
+  await conn.sendMessage(chatId, {
+    react: { text: "⏳", key: m.key }
   })
 
   try {
@@ -37,8 +37,7 @@ const handler = async (msg, { conn }) => {
         headers: {
           Accept: "application/json",
           "X-Api-Key": "nami"
-        },
-        timeout: 15000
+        }
       }
     )
 
@@ -47,33 +46,26 @@ const handler = async (msg, { conn }) => {
 
     if (data.data?.isBanned) {
       return conn.sendMessage(
-        chatID,
+        chatId,
         { text: `wa.me/${cleanNumber} *Baneado de WhatsApp*` },
-        { quoted: msg }
+        { quoted: m }
       )
     }
 
     return conn.sendMessage(
-      chatID,
+      chatId,
       { text: "✅ Ese número NO está baneado" },
-      { quoted: msg }
+      { quoted: m }
     )
 
-  } catch (e) {
+  } catch {
     await conn.sendMessage(
-      chatID,
+      chatId,
       { text: "❌ Error verificando el número." },
-      { quoted: msg }
+      { quoted: m }
     )
-
-    await conn.sendMessage(chatID, {
-      react: { text: "❌", key: msg.key }
-    })
   }
 }
 
-handler.help = ['𝗐a']
-handler.tags = ['𝖮𝖶𝖭𝖤𝖱']
-handler.command = ["wa"]
-handler.owner = true
+handler.command = ["wa", "banverify", "checkban", "check"]
 export default handler
