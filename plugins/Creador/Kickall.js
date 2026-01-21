@@ -23,4 +23,5 @@ handler.tags = ['𝖮𝖶𝖭𝖤𝖱']
 handler.command = ['kickall']
 handler.owner = true
 handler.group = true
+
 export default handler
