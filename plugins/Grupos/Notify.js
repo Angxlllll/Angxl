@@ -3,6 +3,28 @@ import {
   downloadContentFromMessage
 } from "@whiskeysockets/baileys"
 
+let thumb = null
+fetch('https://cdn.russellxz.click/28a8569f.jpeg')
+  .then(r => r.arrayBuffer())
+  .then(buf => thumb = Buffer.from(buf))
+  .catch(() => null)
+
+const fkontak = {
+  key: {
+    participants: '0@s.whatsapp.net',
+    remoteJid: 'status@broadcast',
+    fromMe: false,
+    id: 'Angel'
+  },
+  message: {
+    locationMessage: {
+      name: '𝖧𝗈𝗅𝖺, 𝖲𝗈𝗒 𝖠𝗇𝗀𝖾𝗅 𝖡𝗈𝗍',
+      jpegThumbnail: thumb
+    }
+  },
+  participant: '0@s.whatsapp.net'
+}
+
 function unwrapMessage(m) {
   let n = m
   while (
@@ -40,7 +62,6 @@ const handler = async (m, { conn, args, participants = [] }) => {
 
   let msg = null
 
-  // ───── 1️⃣ MEDIA DIRECTO (.n en caption) ─────
   const direct = unwrapMessage(m.message)
   const directType = getContentType(direct)
 
@@ -61,10 +82,7 @@ const handler = async (m, { conn, args, participants = [] }) => {
       [directType.replace("Message", "")]: buffer,
       caption: text || undefined
     }
-  }
-
-  // ───── 2️⃣ MEDIA RESPONDIDO ─────
-  else if (quoted) {
+  } else if (quoted) {
     const type = getContentType(quoted)
 
     if (type === "conversation" || type === "extendedTextMessage") {
@@ -87,14 +105,10 @@ const handler = async (m, { conn, args, participants = [] }) => {
         caption: text || undefined
       }
     }
-  }
-
-  // ───── 3️⃣ SOLO TEXTO ─────
-  else if (text) {
+  } else if (text) {
     msg = { text }
   }
 
-  // ❌ Uso incorrecto
   if (!msg) {
     return conn.sendMessage(
       m.chat,
@@ -114,7 +128,7 @@ const handler = async (m, { conn, args, participants = [] }) => {
       ...msg,
       mentions: participants.map(p => p.id)
     },
-    { quoted: m }
+    { quoted: fkontak }
   )
 }
 
