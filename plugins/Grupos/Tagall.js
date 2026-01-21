@@ -75,10 +75,10 @@ ${lines.join('\n')}`
   )
 }
 
-handler.help = ['tagall']
-handler.tags = ['grupo']
-handler.command = ['todos', 'tagall', 'invocar']
+handler.help = ['𝖳𝗈𝖽𝗈𝗌']
+handler.tags = ['𝖦𝖱𝖴𝖯𝖮𝖲']
+handler.customPrefix = /^\.?(todos|invocar|invocacion|invocación)$/i
+handler.command = new RegExp()
 handler.group = true
 handler.admin = true
-
 export default handler
