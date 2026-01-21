@@ -27,6 +27,8 @@ function getQuoted(msg) {
     root?.imageMessage?.contextInfo ||
     root?.videoMessage?.contextInfo ||
     root?.documentMessage?.contextInfo ||
+    root?.audioMessage?.contextInfo ||
+    root?.stickerMessage?.contextInfo ||
     null
 
   return ctx?.quotedMessage
@@ -56,11 +58,21 @@ const handler = async (m, { conn, args, participants = [] }) => {
     let buffer = Buffer.alloc(0)
     for await (const c of stream) buffer = Buffer.concat([buffer, c])
 
-    msg = {
-      [directType.replace("Message", "")]: buffer,
-      caption: text || undefined
+    if (directType === "audioMessage") {
+      msg = {
+        audio: buffer,
+        mimetype: direct.audioMessage?.mimetype || "audio/mpeg",
+        ptt: false
+      }
+    } else {
+      msg = {
+        [directType.replace("Message", "")]: buffer,
+        caption: text || undefined
+      }
     }
-  } else if (quoted) {
+  }
+
+  else if (quoted) {
     const type = getContentType(quoted)
 
     if (type === "conversation" || type === "extendedTextMessage") {
@@ -78,25 +90,30 @@ const handler = async (m, { conn, args, participants = [] }) => {
       let buffer = Buffer.alloc(0)
       for await (const c of stream) buffer = Buffer.concat([buffer, c])
 
-      msg = {
-        [type.replace("Message", "")]: buffer,
-        caption: text || undefined
+      if (type === "audioMessage") {
+        msg = {
+          audio: buffer,
+          mimetype: quoted.audioMessage?.mimetype || "audio/mpeg",
+          ptt: false
+        }
+      } else {
+        msg = {
+          [type.replace("Message", "")]: buffer,
+          caption: text || undefined
+        }
       }
     }
-  } else if (text) {
+  }
+
+  else if (text) {
     msg = { text }
   }
 
   if (!msg) {
-    return conn.sendMessage(
-      m.chat,
-      {
-        text:
-          "❌ *Uso incorrecto*\n\n" +
-          "• `.n texto`\n" +
-          "• Responde a un mensaje con `.n`"
-      },
-      { quoted: m }
+    return m.reply(
+      "❌ *Uso incorrecto*\n\n" +
+      "• `.n texto`\n" +
+      "• Responde a un mensaje con `.n`"
     )
   }
 
@@ -104,7 +121,11 @@ const handler = async (m, { conn, args, participants = [] }) => {
     m.chat,
     {
       ...msg,
-      mentions: participants.map(p => p.id)
+      mentions: participants.map(p => p.id),
+      contextInfo: {
+        forwardingScore: 1,
+        isForwarded: true
+      }
     },
     { quoted: m }
   )
