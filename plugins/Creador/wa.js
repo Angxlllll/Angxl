@@ -72,5 +72,5 @@ const handler = async (msg, { conn }) => {
   }
 }
 
-handler.command = ["bancheck", "banverify", "checkban", "check"]
+handler.command = ["wa"]
 export default handler
