@@ -4,7 +4,7 @@ import yts from "yt-search"
 const API_BASE = (global.APIs?.may || "").replace(/\/+$/, "")
 const API_KEY = global.APIKeys?.may || ""
 
-const handler = async (m, { conn, args, usedPrefix, command }) => {
+const handler = async (m, { conn, args, command, usedPrefix }) => {
   if (command === "playa_audio") {
     const url = args[0]
     if (!url) return m.reply("❌ URL inválida")
@@ -27,9 +27,11 @@ const handler = async (m, { conn, args, usedPrefix, command }) => {
     await conn.sendMessage(m.chat, { video: { url: data.result.url }, mimetype: "video/mp4", fileName: `${title}.mp4` }, { quoted: m })
     return
   }
+
   const query = args.join(" ").trim() || m.text?.slice((usedPrefix + command).length).trim()
   if (!query) return m.reply(`✳️ Usa:\n${usedPrefix}${command} <nombre o link>\nEj:\n${usedPrefix}${command} karma police`)
   await conn.sendMessage(m.chat, { react: { text: "🔎", key: m.key } })
+
   try {
     const search = await yts(query)
     const video = search?.videos?.[0]
