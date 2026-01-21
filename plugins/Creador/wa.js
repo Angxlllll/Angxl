@@ -1,4 +1,4 @@
-import fetch from "node-fetch"
+import axios from "axios"
 
 const handler = async (msg, { conn, args }) => {
   const chatID = msg.chat
@@ -31,20 +31,24 @@ const handler = async (msg, { conn, args }) => {
   })
 
   try {
-    const url = `https://io.tylarz.top/v1/bancheck?number=${cleanNumber}&lang=es`
-    const res = await fetch(url, {
-      headers: {
-        Accept: "application/json",
-        "X-Api-Key": "nami"
+    const { data } = await axios.get(
+      "https://io.tylarz.top/v1/bancheck",
+      {
+        params: {
+          number: cleanNumber,
+          lang: "es"
+        },
+        headers: {
+          Accept: "application/json",
+          "X-Api-Key": "nami"
+        },
+        timeout: 15000
       }
-    })
+    )
 
-    const data = await res.json()
-    if (!data?.status) throw new Error("API inválida")
+    if (!data?.status) throw "API inválida"
 
-    const banInfo = data.data
-
-    if (banInfo.isBanned) {
+    if (data.data?.isBanned) {
       return conn.sendMessage(
         chatID,
         { text: `wa.me/${cleanNumber} Baneado de WhatsApp` },
