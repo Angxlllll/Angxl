@@ -92,8 +92,9 @@ const handler = async (m, { conn }) => {
   })
 }
 
-handler.help = ["𝖫𝗂𝗇𝗄"]
-handler.tags = ["𝖦𝖱𝖴𝖯𝖮𝖲"]
-handler.customPrefix = /^\.?(link)$/i
+handler.help = ["link"]
+handler.tags = ["grupo"]
+handler.command = ["link"]
 handler.group = true
+
 export default handler
