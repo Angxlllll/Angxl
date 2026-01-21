@@ -26,8 +26,6 @@ function getQuoted(msg) {
     root?.extendedTextMessage?.contextInfo ||
     root?.imageMessage?.contextInfo ||
     root?.videoMessage?.contextInfo ||
-    root?.audioMessage?.contextInfo ||
-    root?.stickerMessage?.contextInfo ||
     root?.documentMessage?.contextInfo ||
     null
 
@@ -37,25 +35,45 @@ function getQuoted(msg) {
 }
 
 const handler = async (m, { conn, args, participants = [] }) => {
-  const quoted = getQuoted(m)
   const text = args.join(" ").trim()
+  const quoted = getQuoted(m)
+
   let msg = null
 
-  // 🧠 CASO 1: Responde a algo
-  if (quoted) {
+  // ───── 1️⃣ MEDIA DIRECTO (.n en caption) ─────
+  const direct = unwrapMessage(m.message)
+  const directType = getContentType(direct)
+
+  if (
+    directType &&
+    directType !== "conversation" &&
+    directType !== "extendedTextMessage"
+  ) {
+    const stream = await downloadContentFromMessage(
+      direct[directType],
+      directType.replace("Message", "")
+    )
+
+    let buffer = Buffer.alloc(0)
+    for await (const c of stream) buffer = Buffer.concat([buffer, c])
+
+    msg = {
+      [directType.replace("Message", "")]: buffer,
+      caption: text || undefined
+    }
+  }
+
+  // ───── 2️⃣ MEDIA RESPONDIDO ─────
+  else if (quoted) {
     const type = getContentType(quoted)
 
-    // 👉 Texto citado
     if (type === "conversation" || type === "extendedTextMessage") {
       msg = {
         text:
           quoted.conversation ||
           quoted.extendedTextMessage?.text
       }
-    }
-
-    // 👉 Media citada
-    else {
+    } else {
       const stream = await downloadContentFromMessage(
         quoted[type],
         type.replace("Message", "")
@@ -71,8 +89,8 @@ const handler = async (m, { conn, args, participants = [] }) => {
     }
   }
 
-  // 🧠 CASO 2: .n texto
-  if (!msg && text) {
+  // ───── 3️⃣ SOLO TEXTO ─────
+  else if (text) {
     msg = { text }
   }
 
@@ -83,8 +101,8 @@ const handler = async (m, { conn, args, participants = [] }) => {
       {
         text:
           "❌ *Uso incorrecto*\n\n" +
-          "• `.n texto`\n" +
-          "• Responde a un mensaje con `.n texto`"
+          "• Envía una imagen/video con `.n texto`\n" +
+          "• O responde a un mensaje con `.n texto`"
       },
       { quoted: m }
     )
