@@ -72,5 +72,7 @@ const handler = async (msg, { conn }) => {
   }
 }
 
+handler.tags = ['𝖮𝖶𝖭𝖤𝖱']
 handler.command = ["wa"]
+handler.owner = true
 export default handler
