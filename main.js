@@ -9,6 +9,7 @@ import { createRequire } from 'module'
 import readline from 'readline'
 import NodeCache from 'node-cache'
 import chalk from 'chalk'
+import { filesInit } from './lib/plugins.js'
 import pino from 'pino'
 import yargs from 'yargs'
 import syntaxerror from 'syntax-error'
@@ -185,6 +186,7 @@ async function reloadHandler(restart) {
 }
 
 await reloadHandler()
+await filesInit(undefined, conn)
 
 setInterval(() => {
   if (!conn?.user) return
