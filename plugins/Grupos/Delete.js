@@ -7,17 +7,17 @@ const handler = async (m, { conn }) => {
     await conn.sendMessage(m.chat, {
       delete: {
         remoteJid: m.chat,
-        fromMe: false,
-        id: m.quoted.id,
-        participant: m.quoted.sender
+        id: m.quoted.key.id,
+        fromMe: m.quoted.fromMe,
+        participant: m.quoted.fromMe ? undefined : m.quoted.sender
       }
     })
 
     await conn.sendMessage(m.chat, {
       delete: {
         remoteJid: m.chat,
-        fromMe: true,
-        id: m.key.id
+        id: m.key.id,
+        fromMe: true
       }
     })
 
