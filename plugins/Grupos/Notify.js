@@ -1,54 +1,92 @@
-const handler = async (m, { conn, args, participants }) => {
-  let message = null
-  let options = {}
+import {
+  getContentType,
+  downloadContentFromMessage
+} from "@whiskeysockets/baileys"
 
-  if (m.quoted) {
-    const quotedText =
-      m.quoted.text ||
-      m.quoted.msg?.conversation ||
-      m.quoted.msg?.extendedTextMessage?.text
+function unwrapMessage(m) {
+  let n = m
+  while (
+    n?.viewOnceMessage?.message ||
+    n?.viewOnceMessageV2?.message ||
+    n?.viewOnceMessageV2Extension?.message ||
+    n?.ephemeralMessage?.message
+  ) {
+    n =
+      n.viewOnceMessage?.message ||
+      n.viewOnceMessageV2?.message ||
+      n.viewOnceMessageV2Extension?.message ||
+      n.ephemeralMessage?.message
+  }
+  return n
+}
 
-    if (quotedText) {
-      message = { text: quotedText }
-      options.quoted = m.quoted
+function getQuoted(msg) {
+  const root = unwrapMessage(msg.message) || {}
+  const ctx =
+    root?.extendedTextMessage?.contextInfo ||
+    root?.imageMessage?.contextInfo ||
+    root?.videoMessage?.contextInfo ||
+    root?.audioMessage?.contextInfo ||
+    root?.stickerMessage?.contextInfo ||
+    root?.documentMessage?.contextInfo ||
+    null
+
+  return ctx?.quotedMessage
+    ? unwrapMessage(ctx.quotedMessage)
+    : null
+}
+
+const handler = async (m, { conn, args, participants = [] }) => {
+
+  let messageToSend = null
+  const quoted = getQuoted(m)
+
+  if (quoted) {
+    const type = getContentType(quoted)
+
+    if (type === 'conversation' || type === 'extendedTextMessage') {
+      messageToSend = {
+        text:
+          quoted.conversation ||
+          quoted.extendedTextMessage?.text
+      }
     } else {
-      const buffer = await m.quoted.download()
-      const type = m.quoted.mtype.replace('Message', '')
-      message = { [type]: buffer }
+      const stream = await downloadContentFromMessage(
+        quoted[type],
+        type.replace("Message", "")
+      )
+
+      let buffer = Buffer.alloc(0)
+      for await (const c of stream) buffer = Buffer.concat([buffer, c])
+
+      messageToSend = { [type.replace("Message", "")]: buffer }
     }
   }
 
-  if (!message && args.length) {
-    message = { text: args.join(' ') }
+  if (!messageToSend && args.length) {
+    messageToSend = { text: args.join(" ") }
   }
 
-  if (!message) {
-    return m.reply(
-      "❌ *Uso incorrecto*\n\n" +
-      "• `.n texto`\n" +
-      "• Responde a un mensaje con `.n`"
+  if (!messageToSend) {
+    return conn.sendMessage(
+      m.chat,
+      {
+        text:
+          "❌ *Uso incorrecto*\n\n" +
+          "• `.n texto`\n" +
+          "• Responde a un mensaje con `.n`"
+      },
+      { quoted: m }
     )
   }
 
   await conn.sendMessage(m.chat, {
-    react: { text: '📢', key: m.key }
+    ...messageToSend,
+    mentions: participants.map(p => p.id)
   })
-
-  await conn.sendMessage(
-    m.chat,
-    {
-      ...message,
-      mentions: participants.map(p => p.id),
-      contextInfo: {
-        forwardingScore: 1,
-        isForwarded: true
-      }
-    },
-    options
-  )
 }
 
-handler.command = ['n', 'tag', 'notify']
+handler.command = ["n", "tag", "notify"]
 handler.group = true
 handler.admin = true
 
