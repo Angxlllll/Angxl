@@ -12,7 +12,6 @@ fetch('https://cdn.russellxz.click/28a8569f.jpeg')
 const fkontak = {
   key: {
     participants: '0@s.whatsapp.net',
-    remoteJid: 'status@broadcast',
     fromMe: false,
     id: 'Angel'
   },
