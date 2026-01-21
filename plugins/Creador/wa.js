@@ -1,69 +1,73 @@
 import fetch from "node-fetch"
 
-const handler = async (m, { conn, args }) => {
-  const chatId = m.chat
+const handler = async (msg, { conn, args }) => {
+  const chatID = msg.chat
   const text = args.join(" ").trim()
 
   if (!text) {
     return conn.sendMessage(
-      chatId,
+      chatID,
       {
         text:
           "✳️ Uso correcto:\n\n" +
           ".bancheck <número>\n\n" +
-          "> Ejemplo: .wa 584125877491"
+          "> Ejemplo: .bancheck 584125877491"
       },
-      { quoted: m }
+      { quoted: msg }
     )
   }
 
   const cleanNumber = text.replace(/\D/g, "")
   if (cleanNumber.length < 8) {
     return conn.sendMessage(
-      chatId,
+      chatID,
       { text: "❌ Número inválido. Debe tener al menos 8 dígitos." },
-      { quoted: m }
+      { quoted: msg }
     )
   }
 
-  await conn.sendMessage(chatId, {
-    react: { text: "⏳", key: m.key }
+  await conn.sendMessage(chatID, {
+    react: { text: "⏳", key: msg.key }
   })
 
   try {
-    const res = await fetch(
-      `https://io.tylarz.top/v1/bancheck?number=${cleanNumber}&lang=es`,
-      {
-        headers: {
-          Accept: "application/json",
-          "X-Api-Key": "nami"
-        }
+    const url = `https://io.tylarz.top/v1/bancheck?number=${cleanNumber}&lang=es`
+    const res = await fetch(url, {
+      headers: {
+        Accept: "application/json",
+        "X-Api-Key": "nami"
       }
-    )
+    })
 
     const data = await res.json()
     if (!data?.status) throw new Error("API inválida")
 
-    if (data.data?.isBanned) {
+    const banInfo = data.data
+
+    if (banInfo.isBanned) {
       return conn.sendMessage(
-        chatId,
-        { text: `wa.me/${cleanNumber} *Baneado de WhatsApp*` },
-        { quoted: m }
+        chatID,
+        { text: `wa.me/${cleanNumber} Baneado de WhatsApp` },
+        { quoted: msg }
       )
     }
 
     return conn.sendMessage(
-      chatId,
-      { text: "✅ Ese número NO está baneado" },
-      { quoted: m }
+      chatID,
+      { text: "Esa perrita sigue viva" },
+      { quoted: msg }
     )
 
-  } catch {
+  } catch (e) {
     await conn.sendMessage(
-      chatId,
+      chatID,
       { text: "❌ Error verificando el número." },
-      { quoted: m }
+      { quoted: msg }
     )
+
+    await conn.sendMessage(chatID, {
+      react: { text: "❌", key: msg.key }
+    })
   }
 }
 
