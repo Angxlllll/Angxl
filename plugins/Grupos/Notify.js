@@ -2,28 +2,6 @@ import {
   getContentType,
   downloadContentFromMessage
 } from "@whiskeysockets/baileys"
-import fetch from 'node-fetch'
-
-let thumb = null
-fetch('https://files.catbox.moe/cfrof9.jpg')
-  .then(r => r.arrayBuffer())
-  .then(buf => thumb = Buffer.from(buf))
-  .catch(() => null)
-
-const fkontak = {
-  key: {
-    participants: '0@s.whatsapp.net',
-    fromMe: false,
-    id: 'Angel'
-  },
-  message: {
-    locationMessage: {
-      name: '𝖧𝗈𝗅𝖺, 𝖲𝗈𝗒 𝖠𝗇𝗀𝖾𝗅 𝖡𝗈𝗍',
-      jpegThumbnail: thumb
-    }
-  },
-  participant: '0@s.whatsapp.net'
-}
 
 function unwrapMessage(m) {
   let n = m
@@ -115,8 +93,8 @@ const handler = async (m, { conn, args, participants = [] }) => {
       {
         text:
           "❌ *Uso incorrecto*\n\n" +
-          "• Envía una imagen/video con `.n texto`\n" +
-          "• O responde a un mensaje con `.n texto`"
+          "• `.n texto`\n" +
+          "• Responde a un mensaje con `.n`"
       },
       { quoted: m }
     )
@@ -128,7 +106,7 @@ const handler = async (m, { conn, args, participants = [] }) => {
       ...msg,
       mentions: participants.map(p => p.id)
     },
-    { quoted: fkontak }
+    { quoted: m }
   )
 }
 
