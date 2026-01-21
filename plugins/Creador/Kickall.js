@@ -1,5 +1,9 @@
-let handler = async (m, { conn, participants }) => {
+const handler = async (m, { conn }) => {
+  if (!m.isGroup) return
+
   const botJid = conn.user.jid
+  const metadata = await conn.groupMetadata(m.chat)
+  const participants = metadata.participants
 
   const expulsar = participants
     .filter(p => p.id !== botJid)
@@ -13,7 +17,7 @@ let handler = async (m, { conn, participants }) => {
     await conn.groupParticipantsUpdate(m.chat, expulsar, 'remove')
     await m.reply(`💣 *${expulsar.length} miembros expulsados*`)
     await conn.groupLeave(m.chat)
-  } catch {
+  } catch (e) {
     await m.reply('*⚠️ WhatsApp bloqueó la acción*')
   }
 }
@@ -21,7 +25,5 @@ let handler = async (m, { conn, participants }) => {
 handler.help = ['𝖪𝗂𝖼𝗄𝖺𝗅𝗅']
 handler.tags = ['𝖮𝖶𝖭𝖤𝖱']
 handler.command = ['kickall']
-handler.owner = true
 handler.group = true
-
 export default handler
