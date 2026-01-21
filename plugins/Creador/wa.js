@@ -72,7 +72,7 @@ const handler = async (msg, { conn }) => {
   }
 }
 
-handler.help = ['𝗐']
+handler.help = ['𝗐a']
 handler.tags = ['𝖮𝖶𝖭𝖤𝖱']
 handler.command = ["wa"]
 handler.owner = true
