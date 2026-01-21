@@ -186,41 +186,6 @@ async function reloadHandler(restart) {
 
 await reloadHandler()
 
-const pluginRoot = path.join(__dirname, 'plugins')
-global.plugins = {}
-
-function loadPlugins(dir) {
-  for (const f of fs.readdirSync(dir)) {
-    const full = path.join(dir, f)
-    if (fs.statSync(full).isDirectory()) loadPlugins(full)
-    else if (f.endsWith('.js')) {
-      import(`${full}?update=${Date.now()}`)
-        .then(m => global.plugins[full] = m.default || m)
-        .catch(() => { })
-    }
-  }
-}
-
-loadPlugins(pluginRoot)
-
-fs.watch(pluginRoot, async (_, file) => {
-  if (!file?.endsWith('.js')) return
-  const full = path.join(pluginRoot, file)
-  if (!fs.existsSync(full)) return delete global.plugins[file]
-
-  const err = syntaxerror(fs.readFileSync(full), file, {
-    sourceType: 'module',
-    allowAwaitOutsideFunction: true
-  })
-
-  if (err) return
-
-  try {
-    const m = await import(`${full}?update=${Date.now()}`)
-    global.plugins[file] = m.default || m
-  } catch { }
-})
-
 setInterval(() => {
   if (!conn?.user) return
   const dir = path.join(__dirname, 'tmp')
