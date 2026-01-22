@@ -9,7 +9,7 @@
     "start": "node index.js"
   },
   "dependencies": {
- "@whiskeysockets/baileys":"github:ds6/buils",
+"@whiskeysockets/baileys":"github:ds6/buils",
     "chalk": "^5.3.0",
     "node-cache": "^5.1.2",
     "pino": "^8.19.0",
