@@ -61,7 +61,10 @@ const connectionOptions = {
     : Browsers.macOS('Desktop'),
   auth: {
     creds: state.creds,
-    keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'fatal' }))
+    keys: makeCacheableSignalKeyStore(
+      state.keys,
+      pino({ level: 'fatal' })
+    )
   },
   markOnlineOnConnect: false,
   generateHighQualityLinkPreview: true,
@@ -82,3 +85,116 @@ const connectionOptions = {
 }
 
 global.conn = makeWASocket(connectionOptions)
+
+await new Promise(resolve => {
+  const wait = u => {
+    if (u.connection === 'open' || u.connection === 'connecting') {
+      conn.ev.off('connection.update', wait)
+      resolve()
+    }
+  }
+  conn.ev.on('connection.update', wait)
+})
+
+if (opcion === '2') {
+  console.log(chalk.cyanBright('\nIngresa tu número con código país\n'))
+  phoneNumber = await question('--> ')
+  const clean = phoneNumber.replace(/\D/g, '')
+
+  const code = await conn.requestPairingCode(clean)
+
+  console.log(chalk.greenBright('\nIngresa este código:\n'))
+  console.log(chalk.bold(code.match(/.{1,4}/g).join(' ')))
+}
+
+let handler = await import('./handler.js')
+let isInit = true
+
+async function connectionUpdate(update) {
+  const { connection, lastDisconnect } = update
+  const reason = lastDisconnect?.error?.output?.statusCode
+
+  if (connection === 'open') {
+    console.log(
+      chalk.greenBright(`[ ✿ ] Conectado a ${conn.user?.name || 'Bot'}`)
+    )
+  }
+
+  if (connection === 'close') {
+    if (reason !== DisconnectReason.loggedOut) {
+      await reloadHandler(true)
+    }
+  }
+}
+
+async function reloadHandler(restart) {
+  try {
+    const mod = await import(`./handler.js?update=${Date.now()}`)
+    handler = mod
+  } catch {}
+
+  if (restart) {
+    try { conn.ws.close() } catch {}
+    conn.ev.removeAllListeners()
+    global.conn = makeWASocket(connectionOptions)
+    isInit = true
+  }
+
+  if (!isInit) {
+    conn.ev.off('messages.upsert', conn.handler)
+    conn.ev.off('connection.update', conn.connectionUpdate)
+    conn.ev.off('creds.update', conn.credsUpdate)
+  }
+
+  conn.handler = handler.handler.bind(conn)
+  conn.connectionUpdate = connectionUpdate.bind(conn)
+  conn.credsUpdate = saveCreds.bind(conn)
+
+  conn.ev.on('messages.upsert', conn.handler)
+  conn.ev.on('connection.update', conn.connectionUpdate)
+  conn.ev.on('creds.update', conn.credsUpdate)
+
+  isInit = false
+}
+
+await reloadHandler()
+
+const pluginRoot = path.join(__dirname, 'plugins')
+global.plugins = {}
+
+function loadPlugins(dir) {
+  for (const f of fs.readdirSync(dir)) {
+    const full = path.join(dir, f)
+    if (fs.statSync(full).isDirectory()) loadPlugins(full)
+    else if (f.endsWith('.js')) {
+      import(`${full}?update=${Date.now()}`)
+        .then(m => global.plugins[full] = m.default || m)
+        .catch(() => {})
+    }
+  }
+}
+
+loadPlugins(pluginRoot)
+
+fs.watch(pluginRoot, async (_, file) => {
+  if (!file?.endsWith('.js')) return
+  const full = path.join(pluginRoot, file)
+  if (!fs.existsSync(full)) return delete global.plugins[file]
+
+  const err = syntaxerror(
+    fs.readFileSync(full),
+    file,
+    { sourceType: 'module', allowAwaitOutsideFunction: true }
+  )
+
+  if (err) return
+
+  try {
+    const m = await import(`${full}?update=${Date.now()}`)
+    global.plugins[file] = m.default || m
+  } catch {}
+})
+
+process.on('uncaughtException', err => {
+  console.error(err)
+})
