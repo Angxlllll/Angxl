@@ -51,7 +51,7 @@ const handler = async (msg, { conn, args }) => {
     if (data.data?.isBanned) {
       return conn.sendMessage(
         chatID,
-        { text: `wa.me/${cleanNumber} Baneado de WhatsApp` },
+        { text: `wa.me/${cleanNumber}\n\n 𝖥𝗈𝗂 𝖡𝖺𝗇𝗂𝖽𝗈 𝖣𝗈 𝖶𝗁𝖺𝗍𝗌𝖠𝗉𝗉. 𝖥𝖺𝗅𝖾 𝖢𝗈𝗇𝗈𝗌𝖼𝗈 𝖯𝖺𝗋𝖺 𝖮𝖻𝗍𝖾𝗋 𝖠𝗃𝗎𝖽𝖺.` },
         { quoted: msg }
       )
     }
