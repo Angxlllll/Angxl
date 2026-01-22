@@ -1,10 +1,10 @@
 import { fileURLToPath } from 'url'
 
 global.owner = Object.freeze([
-  '159606034665538',
-  '205819731832938',
   '5714222810',
-  '5215542690330'
+  '',
+  '525542690330',
+  '205819731832938'
 ])
 
 global.bot = Object.freeze({
