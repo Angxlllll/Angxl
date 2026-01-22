@@ -180,9 +180,6 @@ async function handleMessage(m) {
     if (!accept) continue
 
     if (plugin.group && !m.isGroup)
-      return global.dfail("group", m, this)
-
-    if (plugin.group && !m.isGroup)
   return global.dfail("group", m, this)
 
 if (m.isGroup && (plugin.admin || plugin.botAdmin)) {
