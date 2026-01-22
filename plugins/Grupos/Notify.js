@@ -118,17 +118,17 @@ const handler = async (m, { conn, args, participants = [] }) => {
   }
 
   await conn.sendMessage(
-    m.chat,
-    {
-      ...msg,
-      mentions: participants.map(p => p.id),
-      contextInfo: {
-        forwardingScore: 1,
-        isForwarded: true
-      }
-    },
-    { quoted: m }
-  )
+  m.chat,
+  {
+    ...msg,
+    contextInfo: {
+      mentionedJid: participants.map(p => p.id),
+      forwardingScore: 1,
+      isForwarded: true
+    }
+  },
+  { quoted: m }
+)
 }
 
 handler.command = ["n", "tag", "notify"]
