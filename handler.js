@@ -183,12 +183,12 @@ async function handleMessage(m) {
       return global.dfail("group", m, this)
 
     if (m.isGroup && (plugin.admin || plugin.botAdmin))
-      if (!groupMetadata) await loadGroupData()
+  if (!groupMetadata) await loadGroupData()
 
 participants = m.isGroup ? participants : []
 
-    if (plugin.rowner && !isROwner)
-      return global.dfail("rowner", m, this)
+if (plugin.rowner && !isROwner)
+  return global.dfail("rowner", m, this)
 
     if (plugin.owner && !isOwner)
       return global.dfail("owner", m, this)
