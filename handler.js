@@ -182,22 +182,26 @@ async function handleMessage(m) {
     if (plugin.group && !m.isGroup)
       return global.dfail("group", m, this)
 
-    if (m.isGroup && (plugin.admin || plugin.botAdmin))
+    if (plugin.group && !m.isGroup)
+  return global.dfail("group", m, this)
+
+if (m.isGroup && (plugin.admin || plugin.botAdmin)) {
   if (!groupMetadata) await loadGroupData()
+}
 
 participants = m.isGroup ? participants : []
 
 if (plugin.rowner && !isROwner)
   return global.dfail("rowner", m, this)
 
-    if (plugin.owner && !isOwner)
-      return global.dfail("owner", m, this)
+if (plugin.owner && !isOwner)
+  return global.dfail("owner", m, this)
 
-    if (plugin.botAdmin && !isBotAdmin)
-      return global.dfail("botAdmin", m, this)
+if (plugin.botAdmin && !isBotAdmin)
+  return global.dfail("botAdmin", m, this)
 
-    if (plugin.admin && !isAdmin)
-      return global.dfail("admin", m, this)
+if (plugin.admin && !isAdmin)
+  return global.dfail("admin", m, this)
 
     const exec =
       typeof plugin === "function"
