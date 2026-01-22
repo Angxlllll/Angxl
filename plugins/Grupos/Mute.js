@@ -3,7 +3,7 @@ import fs from 'fs/promises'
 
 const OWNER_LID = ['159606034665538@lid', '205819731832938@lid']
 const DB_DIR = './database'
-const DATA_FILE = `${DB_DIR}/muted.json`
+const DATA_FILE = `Muteo/muted.json`
 
 await fs.mkdir(DB_DIR, { recursive: true })
 
