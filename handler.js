@@ -189,16 +189,16 @@ if (m.isGroup && (plugin.admin || plugin.botAdmin)) {
 participants = m.isGroup ? participants : []
 
 if (plugin.rowner && !isROwner)
-  return global.dfail("rowner", m, this)
+  continue global.dfail("rowner", m, this)
 
 if (plugin.owner && !isOwner)
-  return global.dfail("owner", m, this)
+  continue global.dfail("owner", m, this)
 
 if (plugin.botAdmin && !isBotAdmin)
-  return global.dfail("botAdmin", m, this)
+  continue global.dfail("botAdmin", m, this)
 
 if (plugin.admin && !isAdmin)
-  return global.dfail("admin", m, this)
+  continue global.dfail("admin", m, this)
 
     const exec =
       typeof plugin === "function"
@@ -207,7 +207,7 @@ if (plugin.admin && !isAdmin)
           ? plugin.default
           : null
 
-    if (!exec) return
+    if (!exec) continue
 
     setImmediate(() =>
       exec.call(this, m, {
