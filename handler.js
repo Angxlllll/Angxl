@@ -1,6 +1,7 @@
 import { smsg } from "./lib/simple.js"
 import { fileURLToPath } from "url"
 import fs from "fs"
+import fetch from "node-fetch"
 
 const DIGITS = s => String(s || "").replace(/\D/g, "")
 
@@ -183,6 +184,8 @@ async function handleMessage(m) {
 
     if (m.isGroup && (plugin.admin || plugin.botAdmin))
       if (!groupMetadata) await loadGroupData()
+
+participants = m.isGroup ? participants : []
 
     if (plugin.rowner && !isROwner)
       return global.dfail("rowner", m, this)
