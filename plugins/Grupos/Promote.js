@@ -1,4 +1,3 @@
-
 const handler = async (m, { conn, participants }) => {
   const user = m.mentionedJid?.[0] || m.quoted?.sender
 
