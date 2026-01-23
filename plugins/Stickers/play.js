@@ -25,7 +25,7 @@ const handler = async (m, { conn, args, usedPrefix, command }) => {
     const title    = video.title
     const author   = video.author?.name || "Desconocido"
     const duration = video.timestamp || "Desconocida"
-    const thumb    = video.thumbnail
+    const thumb    = video.thumbnail || "https://i.ibb.co/3vhYnV0/default.jpg"
     const link     = video.url
 
     await conn.sendMessage(
@@ -33,9 +33,9 @@ const handler = async (m, { conn, args, usedPrefix, command }) => {
       {
         image: { url: thumb },
         caption: `
-🎵 *Título:* ${title}
-🎤 *Artista:* ${author}
-🕒 *Duración:* ${duration}
+⭒ ִֶָ७ ꯭🎵˙⋆｡ - *Título:* ${title}
+⭒ ִֶָ७ ꯭🎤˙⋆｡ - *Artista:* ${author}
+⭒ ִֶָ७ ꯭🕑˙⋆｡ - *Duración:* ${duration}
         `.trim()
       },
       { quoted: m }
@@ -47,18 +47,31 @@ const handler = async (m, { conn, args, usedPrefix, command }) => {
         type: "Mp3",
         apikey: API_KEY
       },
+      headers: {
+        "User-Agent": "Mozilla/5.0",
+        "Accept": "application/json"
+      },
       timeout: 20000
     })
 
-    const audioUrl = res?.data?.result?.url
-    if (!audioUrl) throw "La API no devolvió audio"
+    const data = res?.data
+    const audioUrl = data?.result?.url
+
+    if (
+      !data?.status ||
+      !audioUrl ||
+      typeof audioUrl !== "string" ||
+      !audioUrl.startsWith("http")
+    ) throw "La API no devolvió un audio válido"
+
+    const cleanTitle = (data.result.title || title).replace(/\.mp3$/i, "")
 
     await conn.sendMessage(
       m.chat,
       {
         audio: { url: audioUrl },
         mimetype: "audio/mpeg",
-        fileName: `${title}.mp3`,
+        fileName: `${cleanTitle}.mp3`,
         ptt: false
       },
       { quoted: m }
@@ -69,12 +82,11 @@ const handler = async (m, { conn, args, usedPrefix, command }) => {
     }).catch(() => {})
 
   } catch (e) {
-    m.reply(`❌ Error: ${e}`)
+    m.reply(`❌ Error: ${typeof e === "string" ? e : "Fallo interno"}`)
   }
 }
 
-handler.customPrefix = /^\.?play(\s|$)/i
-handler.command = new RegExp()
+handler.command = ["play", "ytplay"]
 handler.help = ["play <texto>"]
 handler.tags = ["descargas"]
 
