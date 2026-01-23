@@ -32,8 +32,7 @@ const countryFlags = {
 const prefixes = Object.keys(countryFlags).sort((a, b) => b.length - a.length)
 const flagCache = new Map()
 
-const getFlag = jid => {
-  const num = jid.split('@')[0]
+const getFlag = num => {
   if (flagCache.has(num)) return flagCache.get(num)
 
   let flag = '🏳️'
@@ -58,13 +57,16 @@ const handler = async (m, { conn, participants }) => {
   const mentions = []
 
   for (const p of participants) {
-    const jid = p.jid || p.id
+    const jid = p.id || p.jid
+    if (!jid) continue
+
+    const num = jid.split('@')[0]
     mentions.push(jid)
-    lines.push(`${emoji} ${getFlag(jid)} @${jid.split('@')[0]}`)
+    lines.push(`${emoji} ${getFlag(num)} @${num}`)
   }
 
   const text = `*!  MENCION GENERAL  !*
-*PARA ${participants.length} MIEMBROS* 🗣️
+*PARA ${mentions.length} MIEMBROS* 🗣️
 
 ${lines.join('\n')}`
 
@@ -74,6 +76,7 @@ ${lines.join('\n')}`
     { quoted: m }
   )
 }
+
 
 handler.help = ['𝖳𝗈𝖽𝗈𝗌']
 handler.tags = ['𝖦𝖱𝖴𝖯𝖮𝖲']
