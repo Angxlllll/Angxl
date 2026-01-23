@@ -82,8 +82,10 @@ const handler = async (m, { conn, args, usedPrefix, command }) => {
   }
 }
 
-handler.command = ["play"]
 handler.help = ["play <texto>"]
 handler.tags = ["descargas"]
+
+handler.customPrefix = /^(\.play)\s+/i
+handler.command = new RegExp()
 
 export default handler
