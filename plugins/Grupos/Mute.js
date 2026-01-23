@@ -33,11 +33,9 @@ const getThumb = async url => {
   }
 }
 
-let handler = async (m, { conn, command }) => {
-  const ctx = m.msg?.contextInfo
+const handler = async (m, { conn, command }) => {
   const user =
     m.mentionedJid?.[0] ||
-    ctx?.participant ||
     m.quoted?.sender
 
   if (!user)
