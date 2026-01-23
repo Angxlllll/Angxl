@@ -1,15 +1,14 @@
 const handler = async (m, { conn }) => {
-  if (!m.quoted) {
+  if (!m.quoted)
     return m.reply('Responde al mensaje que deseas eliminar.')
-  }
 
   try {
     await conn.sendMessage(m.chat, {
       delete: {
         remoteJid: m.chat,
         id: m.quoted.key.id,
-        fromMe: m.quoted.fromMe,
-        participant: m.quoted.fromMe ? undefined : m.quoted.sender
+        fromMe: m.quoted.key.fromMe,
+        participant: m.quoted.key.participant
       }
     })
 
@@ -20,8 +19,7 @@ const handler = async (m, { conn }) => {
         fromMe: true
       }
     })
-
-  } catch (e) {
+  } catch {
     await m.reply('No se pudo eliminar el mensaje.')
   }
 }
