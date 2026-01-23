@@ -1,6 +1,9 @@
 import axios from "axios"
 import yts from "yt-search"
 
+const API_BASE = (global.APIs?.may || "").replace(/\/+$/, "")
+const API_KEY  = global.APIKeys?.may || ""
+
 const handler = async (m, { conn, args, usedPrefix, command }) => {
 
   console.log("[PLAY] ejecutado:", m.text)
@@ -73,4 +76,7 @@ const handler = async (m, { conn, args, usedPrefix, command }) => {
 
 /* 🔥 ESTO ES LO QUE TU HANDLER SÍ LEE */
 handler.command = ["play"]
+handler.help = ["play <texto>"]
+handler.tags = ["descargas"]
+
 export default handler
