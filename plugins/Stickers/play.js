@@ -87,7 +87,4 @@ const handler = async (m, { conn, args, usedPrefix, command }) => {
 }
 
 handler.command = ["play", "ytplay"]
-handler.help = ["play <texto>"]
-handler.tags = ["descargas"]
-
 export default handler
