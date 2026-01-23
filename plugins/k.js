@@ -2,7 +2,7 @@ import axios from "axios"
 import yts from "yt-search"
 
 const SYLPHY_API = "https://sylphy.xyz/download/ytmp3"
-const API_KEY = "sylphy-zws90tK7OG_1768086161703_xc3t6vvmw"
+const API_KEY = "sylphy-c4e327"
 
 const handler = async (msg, { conn, args, usedPrefix, command }) => {
   const chatId = msg.key.remoteJid
