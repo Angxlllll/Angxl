@@ -110,7 +110,10 @@ async function handleMessage(m) {
     const body = textMsg.slice(1).trim()
     if (!body) return
     args = body.split(/\s+/)
-    command = (args.shift() || "").toLowerCase()
+    command = (args.shift() || "")
+  .toLowerCase()
+  .replace(/[\u200B-\u200D\uFEFF]/g, '')
+  .trim()
   } else {
     args = textMsg.trim().split(/\s+/)
     command = args.shift()?.toLowerCase() || ""
