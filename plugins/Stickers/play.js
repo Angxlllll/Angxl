@@ -47,31 +47,18 @@ const handler = async (m, { conn, args, usedPrefix, command }) => {
         type: "Mp3",
         apikey: API_KEY
       },
-      headers: {
-        "User-Agent": "Mozilla/5.0",
-        "Accept": "application/json"
-      },
       timeout: 20000
     })
 
-    const data = res?.data
-    const audioUrl = data?.result?.url
-
-    if (
-      !data?.status ||
-      !audioUrl ||
-      typeof audioUrl !== "string" ||
-      !audioUrl.startsWith("http")
-    ) throw "La API no devolvió un audio válido"
-
-    const cleanTitle = (data.result.title || title).replace(/\.mp3$/i, "")
+    const audioUrl = res?.data?.result?.url
+    if (!audioUrl) throw "La API no devolvió un audio válido"
 
     await conn.sendMessage(
       m.chat,
       {
         audio: { url: audioUrl },
         mimetype: "audio/mpeg",
-        fileName: `${cleanTitle}.mp3`,
+        fileName: `${title}.mp3`,
         ptt: false
       },
       { quoted: m }
@@ -85,6 +72,9 @@ const handler = async (m, { conn, args, usedPrefix, command }) => {
     m.reply(`❌ Error: ${typeof e === "string" ? e : "Fallo interno"}`)
   }
 }
+
+/* 🔥 ESTA LÍNEA ES LA CLAVE */
+handler.customPrefix = /^\.play(\s|$)/i
 
 handler.command = ["play", "ytplay"]
 handler.help = ["play <texto>"]
