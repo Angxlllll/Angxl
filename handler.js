@@ -115,9 +115,8 @@ async function handleMessage(m) {
   .replace(/[\u200B-\u200D\uFEFF]/g, '')
   .trim()
   } else {
-    args = textMsg.trim().split(/\s+/)
-    command = args.shift()?.toLowerCase() || ""
-  }
+  command = ""
+}
 
   const senderNum = DIGITS(m.sender)
   const isROwner = OWNER_NUMBERS.includes(senderNum)
