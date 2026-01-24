@@ -134,5 +134,6 @@ const handler = async (m, { conn, args, participants = [] }) => {
 handler.command = ["n", "tag", "notify"]
 handler.group = true
 handler.admin = true
-
+handler.help = ["𝖭𝗈𝗍𝗂𝖿𝗒"];
+handler.tags = ["𝖦𝖱𝖴𝖯𝖮𝖲"];
 export default handler
