@@ -13,7 +13,7 @@ global.bot = Object.freeze({
   packname: '𝖠𝗇𝗀𝖾𝗅 𝖡𝗈𝗍',
   author: '𝖠𝗇𝗀𝖾𝗅',
   session: '𝖠𝗇𝗀𝖾𝗅𝖡𝗈𝗍',
-  banner: 'https://files.catbox.moe/dkw6yn.jpg'
+  banner: 'https://files.catbox.moe/0fer0y.jpg'
 })
 
 global.namebot = global.bot.name
