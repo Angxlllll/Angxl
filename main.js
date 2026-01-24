@@ -89,6 +89,7 @@ function createMainSocket() {
 }
 
 global.conn = createMainSocket()
+const conn = global.conn
 
 await new Promise(resolve => {
   const wait = u => {
