@@ -15,11 +15,10 @@ const handler = async (msg, { conn, args, usedPrefix, command }) => {
   }
 
   await conn.sendMessage(chatId, {
-    react: { text: "🔎", key: msg.key }
+    react: { text: "🕓", key: msg.key }
   })
 
   try {
-    /* 🔎 BÚSQUEDA */
     const search = await yts(query)
     if (!search?.videos?.length) throw "Sin resultados"
 
@@ -30,13 +29,10 @@ const handler = async (msg, { conn, args, usedPrefix, command }) => {
     const thumb = video.thumbnail
     const videoUrl = video.url
 
-    /* 🖼️ INFO + IMAGEN */
     const caption = `
 ⭒ ִֶָ७ ꯭🎵˙⋆｡ - *Título:* ${title}
 ⭒ ִֶָ७ ꯭🎤˙⋆｡ - *Artista:* ${author}
 ⭒ ִֶָ७ ꯭🕑˙⋆｡ - *Duración:* ${duration}
-
-» Enviando audio 🎧
 `.trim()
 
     await conn.sendMessage(chatId, {
@@ -44,7 +40,6 @@ const handler = async (msg, { conn, args, usedPrefix, command }) => {
       caption
     }, { quoted: msg })
 
-    /* 🚀 API SYLPHY */
     const res = await axios.get(SYLPHY_API, {
       params: {
         url: videoUrl,
@@ -67,7 +62,6 @@ const handler = async (msg, { conn, args, usedPrefix, command }) => {
 
     const audioUrl = res.data.result.dl_url
 
-    /* 🎧 AUDIO */
     await conn.sendMessage(chatId, {
       audio: { url: audioUrl },
       mimetype: "audio/mpeg",
@@ -86,8 +80,8 @@ const handler = async (msg, { conn, args, usedPrefix, command }) => {
   }
 }
 
-handler.command = ["playa"]
-handler.help = ["playa <texto>"]
+handler.command = ["play"]
+handler.help = ["play <texto>"]
 handler.tags = ["descargas"]
 
 export default handler
