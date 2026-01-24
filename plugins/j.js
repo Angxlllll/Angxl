@@ -11,9 +11,7 @@ import { makeWASocket } from '../lib/simple.js'
 
 if (!global.conns) global.conns = []
 
-const handler = async (m, { conn, command }) => {
-  if (command !== 'code') return
-
+const handler = async (m, { conn }) => {
   const id = m.sender.split('@')[0]
   const sessionPath = path.join('./jadibot', id)
 
@@ -51,53 +49,44 @@ async function startSubBot(m, conn, sessionPath) {
     version
   })
 
-  setTimeout(() => {
-    if (!sock.user) {
-      try { fs.rmSync(sessionPath, { recursive: true, force: true }) } catch {}
-      try { sock.ws.close() } catch {}
-      sock.ev.removeAllListeners()
-      const i = global.conns.indexOf(sock)
-      if (i >= 0) global.conns.splice(i, 1)
-    }
-  }, 60000)
+  sock.ev.on('creds.update', saveCreds)
 
-  sock.ev.on('connection.update', async (update) => {
-    const { connection } = update
-
-    if (!sock.user && connection === 'connecting') {
-      try {
-        await delay(2000)
-        let code = await sock.requestPairingCode(
-          m.sender.split('@')[0]
-        )
-        code = code.match(/.{1,4}/g).join('-')
-
-        await conn.sendMessage(
-          m.chat,
-          {
-            text:
-              '❐ Vinculación por código\n\n' +
-              'Ingresa este código en *Dispositivos vinculados*\n\n' +
-              'Código:\n\n' +
-              code +
-              '\n\n⏱ Expira en 1 minuto'
-          },
-          { quoted: m }
-        )
-      } catch (e) {
-        await m.reply('⚠️ No se pudo generar el código.')
-      }
-    }
-
-    if (connection === 'open') {
-      global.conns.push(sock)
+  if (!state.creds.registered) {
+    try {
+      await delay(1500)
+      let code = await sock.requestPairingCode(id)
+      code = code.match(/.{1,4}/g).join('-')
 
       await conn.sendMessage(
         m.chat,
         {
           text:
+            '❐ Vinculación por código\n\n' +
+            'Ingresa este código en *Dispositivos vinculados*\n\n' +
+            'Código:\n\n' +
+            code +
+            '\n\n⏱ Expira en 1 minuto'
+        },
+        { quoted: m }
+      )
+    } catch (e) {
+      await m.reply('⚠️ No se pudo generar el código.')
+      return
+    }
+  }
+
+  sock.ev.on('connection.update', (update) => {
+    const { connection } = update
+
+    if (connection === 'open') {
+      global.conns.push(sock)
+
+      conn.sendMessage(
+        m.chat,
+        {
+          text:
             '✅ *Sub-Bot vinculado correctamente*\n\n' +
-            '@' + m.sender.split('@')[0],
+            '@' + id,
           mentions: [m.sender]
         },
         { quoted: m }
@@ -110,8 +99,6 @@ async function startSubBot(m, conn, sessionPath) {
       } catch {}
     }
   })
-
-  sock.ev.on('creds.update', saveCreds)
 }
 
 const delay = ms => new Promise(r => setTimeout(r, ms))
