@@ -162,37 +162,54 @@ await reloadHandler()
 const pluginRoot = path.join(__dirname, 'plugins')
 global.plugins = {}
 
-function loadPlugins(dir) {
+async function loadPlugins(dir) {
   for (const f of fs.readdirSync(dir)) {
     const full = path.join(dir, f)
-    if (fs.statSync(full).isDirectory()) loadPlugins(full)
-    else if (f.endsWith('.js')) {
-      import(`${full}?update=${Date.now()}`)
-        .then(m => global.plugins[full] = m.default || m)
-        .catch(() => {})
+
+    if (fs.statSync(full).isDirectory()) {
+      await loadPlugins(full)
+    } else if (f.endsWith('.js')) {
+      try {
+        const m = await import(`${full}?update=${Date.now()}`)
+        global.plugins[full] = m.default || m
+      } catch (e) {
+        console.error(chalk.red('[PLUGIN ERROR]'), full)
+        console.error(e.message)
+      }
     }
   }
 }
 
-loadPlugins(pluginRoot)
+await loadPlugins(pluginRoot)
 
-fs.watch(pluginRoot, async (_, file) => {
+fs.watch(pluginRoot, { recursive: true }, async (_, file) => {
   if (!file?.endsWith('.js')) return
+
   const full = path.join(pluginRoot, file)
-  if (!fs.existsSync(full)) return delete global.plugins[file]
+
+  if (!fs.existsSync(full)) {
+    delete global.plugins[full]
+    return
+  }
 
   const err = syntaxerror(
     fs.readFileSync(full),
-    file,
+    full,
     { sourceType: 'module', allowAwaitOutsideFunction: true }
   )
 
-  if (err) return
+  if (err) {
+    console.error(chalk.red('[SYNTAX ERROR]'), file)
+    return
+  }
 
   try {
     const m = await import(`${full}?update=${Date.now()}`)
-    global.plugins[file] = m.default || m
-  } catch {}
+    global.plugins[full] = m.default || m
+    console.log(chalk.green('[PLUGIN RELOADED]'), file)
+  } catch (e) {
+    console.error(chalk.red('[PLUGIN RELOAD ERROR]'), file)
+  }
 })
 
 process.on('uncaughtException', err => {
