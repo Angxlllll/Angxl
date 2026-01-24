@@ -1,6 +1,5 @@
 import { smsg } from "./lib/simple.js"
 import { fileURLToPath } from "url"
-import fs from "fs"
 
 const DIGITS = s => String(s || "").replace(/\D/g, "")
 
@@ -25,36 +24,6 @@ const OWNER_NUMBERS = (global.owner || []).map(v =>
   DIGITS(Array.isArray(v) ? v[0] : v)
 )
 
-let ICON_BUFFER = null
-
-async function getIconBuffer() {
-  if (ICON_BUFFER) return ICON_BUFFER
-  try {
-    const r = await fetch("https://files.catbox.moe/u1lwcu.jpg")
-    ICON_BUFFER = Buffer.from(await r.arrayBuffer())
-    return ICON_BUFFER
-  } catch {
-    return null
-  }
-}
-
-getIconBuffer()
-
-function dialogContext() {
-  if (!ICON_BUFFER) return {}
-  return {
-    contextInfo: {
-      externalAdReply: {
-        title: global.namebot || "𝖠𝗇𝗀𝖾𝗅 𝖡𝗈𝗍",
-        body: global.author,
-        thumbnail: ICON_BUFFER,
-        mediaType: 1,
-        renderLargerThumbnail: false
-      }
-    }
-  }
-}
-
 global.dfail = async (type, m, conn) => {
   const msg = {
     rowner: "𝖤𝗌𝗍𝖾 𝖢𝗈𝗆𝖺𝗇𝖽𝗈 𝖲𝗈𝗅𝗈 𝖯𝗎𝖾𝖽𝖾 𝖲𝖾𝗋 𝖴𝗌𝖺𝖽𝗈 𝖯𝗈𝗋 𝖬𝗂 𝖢𝗋𝖾𝖺𝖽𝗈𝗋",
@@ -69,7 +38,7 @@ global.dfail = async (type, m, conn) => {
   }[type]
 
   if (!msg) return
-  conn.sendMessage(m.chat, { text: msg }, { quoted: m, ...dialogContext() })
+  conn.sendMessage(m.chat, { text: msg }, { quoted: m })
 }
 
 global.groupMetaCache ||= new Map()
@@ -111,12 +80,12 @@ async function handleMessage(m) {
     if (!body) return
     args = body.split(/\s+/)
     command = (args.shift() || "")
-  .toLowerCase()
-  .replace(/[\u200B-\u200D\uFEFF]/g, '')
-  .trim()
+      .toLowerCase()
+      .replace(/[\u200B-\u200D\uFEFF]/g, "")
+      .trim()
   } else {
-  command = ""
-}
+    command = ""
+  }
 
   const senderNum = DIGITS(m.sender)
   const isROwner = OWNER_NUMBERS.includes(senderNum)
@@ -175,48 +144,48 @@ async function handleMessage(m) {
         plugin.command instanceof RegExp
           ? plugin.command.test(command)
           : Array.isArray(plugin.command)
-            ? plugin.command.includes(command)
-            : plugin.command === command
+          ? plugin.command.includes(command)
+          : plugin.command === command
 
     if (!accept) continue
 
     if (plugin.group && !m.isGroup) {
-  global.dfail("group", m, this)
-  continue
-}
+      global.dfail("group", m, this)
+      continue
+    }
 
-if (m.isGroup && (plugin.admin || plugin.botAdmin)) {
-  if (!groupMetadata) await loadGroupData()
-}
+    if (m.isGroup && (plugin.admin || plugin.botAdmin)) {
+      if (!groupMetadata) await loadGroupData()
+    }
 
-participants = m.isGroup ? participants : []
+    participants = m.isGroup ? participants : []
 
-if (plugin.rowner && !isROwner) {
-  global.dfail("rowner", m, this)
-  continue
-}
+    if (plugin.rowner && !isROwner) {
+      global.dfail("rowner", m, this)
+      continue
+    }
 
-if (plugin.owner && !isOwner) {
-  global.dfail("owner", m, this)
-  continue
-}
+    if (plugin.owner && !isOwner) {
+      global.dfail("owner", m, this)
+      continue
+    }
 
-if (plugin.botAdmin && !isBotAdmin) {
-  global.dfail("botAdmin", m, this)
-  continue
-}
+    if (plugin.botAdmin && !isBotAdmin) {
+      global.dfail("botAdmin", m, this)
+      continue
+    }
 
-if (plugin.admin && !isAdmin) {
-  global.dfail("admin", m, this)
-  continue
-}
+    if (plugin.admin && !isAdmin) {
+      global.dfail("admin", m, this)
+      continue
+    }
 
     const exec =
       typeof plugin === "function"
         ? plugin
         : typeof plugin.default === "function"
-          ? plugin.default
-          : null
+        ? plugin.default
+        : null
 
     if (!exec) continue
 
