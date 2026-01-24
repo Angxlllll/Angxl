@@ -142,7 +142,6 @@ async function connectionUpdate(update) {
       await reloadHandler(true)
     }
   }
-}
 
 async function reloadHandler(restart) {
   try {
