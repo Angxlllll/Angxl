@@ -26,10 +26,6 @@ if (global.conns instanceof Array) console.log()
 else global.conns = []
 function isSubBotConnected(jid) { return global.conns.some(sock => sock?.user?.jid && sock.user.jid.split("@")[0] === jid.split("@")[0]) }
 let handler = async (m, { conn, args, usedPrefix, command, isOwner }) => {
-if (!globalThis.db.data.settings[conn.user.jid].jadibotmd) return m.reply(`ꕥ El Comando *${command}* está desactivado temporalmente.`)
-let time = global.db.data.users[m.sender].Subs + 120000
-if (new Date - global.db.data.users[m.sender].Subs < 120000) return conn.reply(m.chat, `ꕥ Debes esperar ${msToTime(time - new Date())} para volver a vincular un *Sub-Bot.*`, m)
-let socklimit = global.conns.filter(sock => sock?.user).length
 if (socklimit >= 50) {
 return m.reply(`ꕥ No se han encontrado espacios para *Sub-Bots* disponibles.`)
 }
@@ -48,7 +44,6 @@ yukiJBOptions.usedPrefix = usedPrefix
 yukiJBOptions.command = command
 yukiJBOptions.fromCommand = true
 yukiJadiBot(yukiJBOptions)
-global.db.data.users[m.sender].Subs = new Date * 1
 }
 handler.help = ['qr', 'code']
 handler.tags = ['serbot']
