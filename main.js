@@ -84,7 +84,7 @@ const connectionOptions = {
   keepAliveIntervalMs: 55000
 }
 
-global.conn = makeWASocket(connectionOptions)
+global.conn = createMainSocket()
 
 await new Promise(resolve => {
   const wait = u => {
