@@ -1,24 +1,6 @@
-import axios from "axios"
-
 let MENU_CACHE = null
 let MENU_TS = 0
 const MENU_TTL = 30_000
-
-let ICON_BUFFER = null
-async function getIconBuffer() {
-  if (ICON_BUFFER) return ICON_BUFFER
-  try {
-    const { data } = await axios.get(
-      "https://files.catbox.moe/u1lwcu.jpg",
-      { responseType: "arraybuffer" }
-    )
-    ICON_BUFFER = Buffer.from(data)
-    return ICON_BUFFER
-  } catch {
-    return null
-  }
-}
-getIconBuffer()
 
 let handler = async (m, { conn }) => {
   await conn.sendMessage(m.chat, { react: { text: "🔥", key: m.key } })
@@ -49,6 +31,7 @@ let handler = async (m, { conn }) => {
   let userId = m.mentionedJid?.[0] || m.sender
   let uptime = clockString(process.uptime() * 1000)
 
+  // ⚡ cache instantáneo
   if (MENU_CACHE && Date.now() - MENU_TS < MENU_TTL) {
     return conn.sendMessage(
       m.chat,
@@ -66,7 +49,7 @@ let handler = async (m, { conn }) => {
     if (!plugin?.help || !plugin?.tags) continue
     for (let tag of plugin.tags) {
       if (!categories[tag]) categories[tag] = []
-      categories[tag].push(...plugin.help.map(c => `.${c}`))
+      categories[tag].push(...plugin.help.map(cmd => `.${cmd}`))
     }
   }
 
