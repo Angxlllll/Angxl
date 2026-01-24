@@ -1,8 +1,8 @@
 import axios from "axios"
 import yts from "yt-search"
 
-const API_BASE = (global.APIs?.may || "").replace(/\/+$/, "")
-const API_KEY  = global.APIKeys?.may || ""
+const API_KEY = "Angxlllll"
+const API_URL = "https://api-adonix.ultraplus.click" // 🔴 CAMBIA SOLO ESTO
 
 const handler = async (msg, { conn, args, usedPrefix, command }) => {
 
@@ -11,60 +11,60 @@ const handler = async (msg, { conn, args, usedPrefix, command }) => {
 
   if (!query)
     return conn.sendMessage(chatId, {
-      text: `✳️ Usa:\n${usedPrefix}${command} <nombre de canción>\nEj:\n${usedPrefix}${command} no surprises`
+      text: `✳️ Usa:\n${usedPrefix}${command} <nombre de canción>\nEj:\n${usedPrefix}${command} Karma Police`
     }, { quoted: msg })
 
   conn.sendMessage(chatId, { react: { text: "🕒", key: msg.key } }).catch(() => {})
 
   try {
+    /* 🔍 BÚSQUEDA (ligera) */
     const search = await yts(query)
     const video = search?.videos?.[0]
     if (!video) throw "No se encontró ningún resultado"
 
-    const title    = video.title
-    const author   = video.author?.name || "Desconocido"
-    const duration = video.timestamp || "Desconocida"
-    const thumb    = video.thumbnail || "https://i.ibb.co/3vhYnV0/default.jpg"
-    const link     = video.url
+    const link = video.url
+    const thumb = video.thumbnail
 
-    conn.sendMessage(chatId, {
-      image: { url: thumb },
-      caption: `
-⭒ ִֶָ७ ꯭🎵˙⋆｡ - *Título:* ${title}
-⭒ ִֶָ७ ꯭🎤˙⋆｡ - *Artista:* ${author}
-⭒ ִֶָ७ ꯭🕑˙⋆｡ - *Duración:* ${duration}
-`.trim()
-    }, { quoted: msg }).catch(() => {})
-
-    const res = await axios.get(`${API_BASE}/ytdl`, {
+    /* 🎧 LLAMADA ÚNICA A LA API */
+    const res = await axios.get(API_URL, {
       params: {
         url: link,
-        type: "Mp3",
         apikey: API_KEY
       },
       headers: {
         "User-Agent": "Mozilla/5.0",
         "Accept": "application/json"
       },
-      timeout: 20000
+      timeout: 25000
     })
 
     const data = res?.data
-    const audioUrl = data?.result?.url
 
     if (
-      !data?.status ||
-      !audioUrl ||
-      typeof audioUrl !== "string" ||
-      !audioUrl.startsWith("http")
+      !data?.estado ||
+      !data?.datos?.url ||
+      !data.datos.url.startsWith("http")
     ) throw "La API no devolvió un audio válido"
 
-    const cleanTitle = (data.result.title || title).replace(/\.mp3$/i, "")
+    const title = data.datos.título || video.title
+    const duration = data.datos.duración || "Desconocida"
 
+    /* 🖼️ INFO */
     await conn.sendMessage(chatId, {
-      audio: { url: audioUrl },
+      image: { url: thumb },
+      caption: `
+⭒ 🎵 *Título:* ${title}
+⭒ 🕑 *Duración:* ${duration}
+
+» Enviando audio 🎧
+`.trim()
+    }, { quoted: msg })
+
+    /* ▶️ AUDIO DIRECTO */
+    await conn.sendMessage(chatId, {
+      audio: { url: data.datos.url },
       mimetype: "audio/mpeg",
-      fileName: `${cleanTitle}.mp3`,
+      fileName: `${title}.mp3`,
       ptt: false
     }, { quoted: msg })
 
@@ -78,7 +78,7 @@ const handler = async (msg, { conn, args, usedPrefix, command }) => {
 }
 
 handler.command = ["play", "ytplay"]
-handler.help    = ["play <texto>"]
-handler.tags    = ["descargas"]
+handler.help = ["play <texto>"]
+handler.tags = ["descargas"]
 
 export default handler
