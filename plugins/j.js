@@ -1,111 +1,36 @@
-import fs from 'fs'
-import path from 'path'
-import NodeCache from 'node-cache'
-import pino from 'pino'
-import {
-  useMultiFileAuthState,
-  makeCacheableSignalKeyStore,
-  fetchLatestBaileysVersion
-} from '@whiskeysockets/baileys'
-import { makeWASocket } from '../lib/simple.js'
+import chalk from 'chalk'
 
-if (!global.conns) global.conns = []
+const handler = async (m, { conn }) => {
+  const sender = m.sender.split('@')[0]
 
-const handler = async (m, { conn, command }) => {
-  if (command !== 'code') return
-
-  const id = m.sender.split('@')[0]
-  const sessionPath = path.join('./jadibot', id)
-
-  if (fs.existsSync(sessionPath)) {
-    await m.reply('⚠️ Ya tienes una sesión activa')
-    return
+  if (!sender || sender.length < 8) {
+    return m.reply('⚠️ Número inválido')
   }
 
-  fs.mkdirSync(sessionPath, { recursive: true })
-  startSubBot(m, conn, sessionPath)
+  try {
+    const code = await conn.requestPairingCode(sender)
+    const formatted = code.match(/.{1,4}/g).join('-')
+
+    await conn.sendMessage(
+      m.chat,
+      {
+        text:
+          '❐ Vinculación por código\n\n' +
+          'Ingresa este código en *Dispositivos vinculados*\n\n' +
+          'Código:\n\n' +
+          formatted +
+          '\n\n⏱ Expira en 1 minuto'
+      },
+      { quoted: m }
+    )
+  } catch (e) {
+    console.log(chalk.red('PAIRING ERROR:'), e)
+    await m.reply('⚠️ No se pudo generar el código.')
+  }
 }
 
 handler.command = ['code']
 handler.tags = ['serbot']
 handler.help = ['code']
+
 export default handler
-
-async function startSubBot(m, conn, sessionPath) {
-  const { version } = await fetchLatestBaileysVersion()
-  const msgRetryCounterCache = new NodeCache()
-  const { state, saveCreds } = await useMultiFileAuthState(sessionPath)
-
-  state.creds.registered = false
-
-  const sock = makeWASocket({
-    logger: pino({ level: 'silent' }),
-    printQRInTerminal: false,
-    browser: ['Android', 'Chrome', '13'],
-    auth: {
-      creds: state.creds,
-      keys: makeCacheableSignalKeyStore(
-        state.keys,
-        pino({ level: 'fatal' })
-      )
-    },
-    syncFullHistory: false,
-    msgRetryCounterCache,
-    version
-  })
-
-  sock.ev.on('creds.update', saveCreds)
-
-  let pairingRequested = false
-
-  sock.ev.on('connection.update', async update => {
-    const { connection } = update
-
-    if (connection === 'connecting' && !pairingRequested) {
-      pairingRequested = true
-      try {
-        let code = await sock.requestPairingCode(
-          m.sender.split('@')[0]
-        )
-
-        code = code.match(/.{1,4}/g).join('-')
-
-        await conn.sendMessage(
-          m.chat,
-          {
-            text:
-              '❐ Vinculación por código\n\n' +
-              'Ve a WhatsApp > Dispositivos vinculados\n\n' +
-              'Código:\n\n' +
-              code +
-              '\n\n⏱ Expira en 1 minuto'
-          },
-          { quoted: m }
-        )
-      } catch (e) {
-        fs.rmSync(sessionPath, { recursive: true, force: true })
-        await m.reply('⚠️ No se pudo generar el código.')
-      }
-    }
-
-    if (connection === 'open') {
-      global.conns.push(sock)
-      await conn.sendMessage(
-        m.chat,
-        {
-          text:
-            '✅ *Sub-Bot vinculado correctamente*\n\n@' +
-            m.sender.split('@')[0],
-          mentions: [m.sender]
-        },
-        { quoted: m }
-      )
-    }
-
-    if (connection === 'close') {
-      try {
-        fs.rmSync(sessionPath, { recursive: true, force: true })
-      } catch {}
-    }
-  })
-}
