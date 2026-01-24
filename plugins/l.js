@@ -2,8 +2,6 @@ import fs from 'fs'
 import path from 'path'
 import pino from 'pino'
 import chalk from 'chalk'
-import qrcode from 'qrcode'
-import NodeCache from 'node-cache'
 import { fileURLToPath } from 'url'
 
 import {
@@ -18,45 +16,29 @@ import { makeWASocket } from '../lib/simple.js'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
-/* ───── GLOBAL SUBBOTS ───── */
 global.conns ||= []
 
-const isSubBotConnected = jid =>
-  global.conns.some(
-    sock => sock?.user?.jid?.split('@')[0] === jid.split('@')[0]
-  )
-
-/* ───── HANDLER ───── */
-let handler = async (m, { conn, args, usedPrefix, command }) => {
+let handler = async (m, { conn }) => {
   const id = m.sender.split('@')[0]
-  const base = path.join(__dirname, '../jadibot', id)
+  const sessionPath = path.join(__dirname, '../jadibot', id)
 
-  fs.mkdirSync(base, { recursive: true })
+  fs.mkdirSync(sessionPath, { recursive: true })
 
-  yukiJadiBot({
-    pathSession: base,
-    m,
-    conn,
-    args,
-    usedPrefix,
-    command
-  })
+  startSubBot(sessionPath, m, conn)
 }
 
-handler.help = ['qr', 'code']
+handler.help = ['code']
 handler.tags = ['serbot']
-handler.command = ['qr', 'code']
+handler.command = ['code']
 
 export default handler
 
-/* ───── JADIBOT ───── */
-async function yukiJadiBot({ pathSession, m, conn, args, command }) {
-  const useCode = args.includes('code')
-
+async function startSubBot(sessionPath, m, conn) {
   const { state, saveCreds } =
-    await useMultiFileAuthState(pathSession)
+    await useMultiFileAuthState(sessionPath)
 
-  const { version } = await fetchLatestBaileysVersion()
+  const { version } =
+    await fetchLatestBaileysVersion()
 
   const sock = makeWASocket({
     logger: pino({ level: 'silent' }),
@@ -74,25 +56,21 @@ async function yukiJadiBot({ pathSession, m, conn, args, command }) {
 
   sock.ev.on('creds.update', saveCreds)
 
+  let codeSent = false // 🔒 evita duplicados
+
   sock.ev.on('connection.update', async update => {
-    const { connection, qr, lastDisconnect } = update
+    const { connection } = update
 
-    if (qr && !useCode) {
-      const img = await qrcode.toBuffer(qr, { scale: 8 })
-      await conn.sendMessage(
-        m.chat,
-        { image: img, caption: '📱 Escanea este QR (45s)' },
-        { quoted: m }
-      )
-    }
+    if (!sock.authState.creds.registered && !codeSent) {
+      codeSent = true
 
-    if (qr && useCode) {
       const code = await sock.requestPairingCode(
         m.sender.split('@')[0]
       )
+
       await conn.reply(
         m.chat,
-        `🔑 Código:\n${code.match(/.{1,4}/g).join('-')}`,
+        `🔐 *Código de vinculación*\n\n${code.match(/.{1,4}/g).join('-')}`,
         m
       )
     }
@@ -100,39 +78,22 @@ async function yukiJadiBot({ pathSession, m, conn, args, command }) {
     if (connection === 'open') {
       global.conns.push(sock)
 
-      await conn.sendMessage(
+      await conn.reply(
         m.chat,
-        {
-          text: isSubBotConnected(m.sender)
-            ? '⚠️ Ya estás conectado'
-            : '✅ Sub-Bot conectado correctamente'
-        },
-        { quoted: m }
+        '✅ Sub-Bot conectado correctamente',
+        m
       )
 
       console.log(
-        chalk.green(
-          `[SUBBOT] ${sock.user?.jid} conectado`
-        )
+        chalk.green(`[SUBBOT] ${sock.user.jid} conectado`)
       )
     }
 
     if (connection === 'close') {
-      const reason =
-        lastDisconnect?.error?.output?.statusCode
-
-      if (reason !== DisconnectReason.loggedOut) {
-        try { sock.ws.close() } catch {}
-      }
-
-      global.conns = global.conns.filter(
-        s => s !== sock
-      )
+      global.conns = global.conns.filter(s => s !== sock)
 
       console.log(
-        chalk.red(
-          `[SUBBOT] Sesión cerrada (${reason})`
-        )
+        chalk.red('[SUBBOT] Sesión cerrada')
       )
     }
   })
