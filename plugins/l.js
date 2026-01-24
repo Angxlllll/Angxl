@@ -11,24 +11,25 @@ import {
   DisconnectReason
 } from '@whiskeysockets/baileys'
 
-import { makeWASocket } from '../lib/simple.js'
+import { makeWASocket, smsg } from '../lib/simple.js'
+import handlerMain from '../handler.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 global.conns ||= []
 
-let handler = async (m, { conn }) => {
+let handler = async (m) => {
   const id = m.sender.split('@')[0]
   const sessionPath = path.join(__dirname, '../jadibot', id)
 
   if (fs.existsSync(path.join(sessionPath, 'creds.json'))) {
-    return conn.reply(m.chat, '⚠️ Ya tienes una sesión activa', m)
+    return m.reply('⚠️ Ya tienes una sesión activa')
   }
 
   fs.mkdirSync(sessionPath, { recursive: true })
 
-  startSubBot(sessionPath, m, conn)
+  startSubBot(sessionPath)
 }
 
 handler.help = ['code']
@@ -37,7 +38,7 @@ handler.command = ['code']
 
 export default handler
 
-async function startSubBot(sessionPath, m, conn) {
+async function startSubBot(sessionPath) {
   const { state, saveCreds } =
     await useMultiFileAuthState(sessionPath)
 
@@ -73,43 +74,38 @@ async function startSubBot(sessionPath, m, conn) {
       codeSent = true
 
       const code = await sock.requestPairingCode(
-        m.sender.split('@')[0]
+        sock.user?.id?.split('@')[0]
       )
 
-      await conn.reply(
-        m.chat,
-        `🔐 Código de vinculación\n\n${code.match(/.{1,4}/g).join('-')}`,
-        m
-      )
+      const chat = global.conn?.user?.id
+      if (chat) {
+        await global.conn.sendMessage(
+          chat,
+          { text: `🔐 Código de vinculación\n\n${code.match(/.{1,4}/g).join('-')}` }
+        )
+      }
     }
 
     if (connection === 'open' && sock.authState.creds.registered) {
       global.conns.push(sock)
-
-      await conn.reply(
-        m.chat,
-        '✅ Sub-Bot conectado correctamente',
-        m
-      )
-
-      console.log(
-        chalk.green(`[SUBBOT] ${sock.user.jid} conectado`)
-      )
+      console.log(chalk.green(`[SUBBOT] ${sock.user.jid} conectado`))
     }
 
     if (connection === 'close') {
       global.conns = global.conns.filter(s => s !== sock)
-
-      const reason =
-        lastDisconnect?.error?.output?.statusCode
-
+      const reason = lastDisconnect?.error?.output?.statusCode
       if (reason !== DisconnectReason.loggedOut) {
         try { sock.ws.close() } catch {}
       }
+      console.log(chalk.red('[SUBBOT] Sesión cerrada'))
+    }
+  })
 
-      console.log(
-        chalk.red('[SUBBOT] Sesión cerrada')
-      )
+  sock.ev.on('messages.upsert', async ({ messages }) => {
+    for (const msg of messages) {
+      if (!msg.message) continue
+      const m = smsg(sock, msg)
+      await handlerMain(m, sock)
     }
   })
 }
