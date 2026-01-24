@@ -11,7 +11,9 @@ import { makeWASocket } from '../lib/simple.js'
 
 if (!global.conns) global.conns = []
 
-const handler = async (m, { conn }) => {
+const handler = async (m, { conn, command }) => {
+  if (command !== 'code') return
+
   const id = m.sender.split('@')[0]
   const sessionPath = path.join('./jadibot', id)
 
@@ -36,6 +38,7 @@ async function startSubBot(m, conn, sessionPath) {
   const sock = makeWASocket({
     logger: pino({ level: 'silent' }),
     printQRInTerminal: false,
+    browser: ['Android', 'Chrome', '13'],
     auth: {
       creds: state.creds,
       keys: makeCacheableSignalKeyStore(
@@ -43,35 +46,48 @@ async function startSubBot(m, conn, sessionPath) {
         pino({ level: 'fatal' })
       )
     },
+    syncFullHistory: false,
     msgRetryCounterCache,
     version
   })
 
-  sock.ev.on('creds.update', saveCreds)
-
-  try {
-    await delay(2000)
-    let code = await sock.requestPairingCode(m.sender.split('@')[0])
-    code = code.match(/.{1,4}/g).join('-')
-
-    await conn.sendMessage(
-      m.chat,
-      {
-        text:
-          '❐ Vinculación por código\n\n' +
-          'Ingresa este código en Dispositivos vinculados\n\n' +
-          'Código:\n\n' +
-          code +
-          '\n\nExpira en 1 minuto'
-      },
-      { quoted: m }
-    )
-  } catch {
-    await m.reply('⚠️ No se pudo generar el código.')
-  }
+  setTimeout(() => {
+    if (!sock.user) {
+      try { fs.rmSync(sessionPath, { recursive: true, force: true }) } catch {}
+      try { sock.ws.close() } catch {}
+      sock.ev.removeAllListeners()
+      const i = global.conns.indexOf(sock)
+      if (i >= 0) global.conns.splice(i, 1)
+    }
+  }, 60000)
 
   sock.ev.on('connection.update', async (update) => {
     const { connection } = update
+
+    if (!sock.user && connection === 'connecting') {
+      try {
+        await delay(2000)
+        let code = await sock.requestPairingCode(
+          m.sender.split('@')[0]
+        )
+        code = code.match(/.{1,4}/g).join('-')
+
+        await conn.sendMessage(
+          m.chat,
+          {
+            text:
+              '❐ Vinculación por código\n\n' +
+              'Ingresa este código en *Dispositivos vinculados*\n\n' +
+              'Código:\n\n' +
+              code +
+              '\n\n⏱ Expira en 1 minuto'
+          },
+          { quoted: m }
+        )
+      } catch (e) {
+        await m.reply('⚠️ No se pudo generar el código.')
+      }
+    }
 
     if (connection === 'open') {
       global.conns.push(sock)
@@ -79,7 +95,9 @@ async function startSubBot(m, conn, sessionPath) {
       await conn.sendMessage(
         m.chat,
         {
-          text: '✅ Sub-Bot conectado correctamente\n\n@' + m.sender.split('@')[0],
+          text:
+            '✅ *Sub-Bot vinculado correctamente*\n\n' +
+            '@' + m.sender.split('@')[0],
           mentions: [m.sender]
         },
         { quoted: m }
@@ -92,6 +110,8 @@ async function startSubBot(m, conn, sessionPath) {
       } catch {}
     }
   })
+
+  sock.ev.on('creds.update', saveCreds)
 }
 
 const delay = ms => new Promise(r => setTimeout(r, ms))
