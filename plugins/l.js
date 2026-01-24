@@ -22,6 +22,10 @@ let handler = async (m, { conn }) => {
   const id = m.sender.split('@')[0]
   const sessionPath = path.join(__dirname, '../jadibot', id)
 
+  if (fs.existsSync(path.join(sessionPath, 'creds.json'))) {
+    return conn.reply(m.chat, '⚠️ Ya tienes una sesión activa', m)
+  }
+
   fs.mkdirSync(sessionPath, { recursive: true })
 
   startSubBot(sessionPath, m, conn)
@@ -56,12 +60,16 @@ async function startSubBot(sessionPath, m, conn) {
 
   sock.ev.on('creds.update', saveCreds)
 
-  let codeSent = false // 🔒 evita duplicados
+  let codeSent = false
 
   sock.ev.on('connection.update', async update => {
-    const { connection } = update
+    const { connection, lastDisconnect } = update
 
-    if (!sock.authState.creds.registered && !codeSent) {
+    if (
+      connection === 'open' &&
+      !sock.authState.creds.registered &&
+      !codeSent
+    ) {
       codeSent = true
 
       const code = await sock.requestPairingCode(
@@ -70,12 +78,12 @@ async function startSubBot(sessionPath, m, conn) {
 
       await conn.reply(
         m.chat,
-        `🔐 *Código de vinculación*\n\n${code.match(/.{1,4}/g).join('-')}`,
+        `🔐 Código de vinculación\n\n${code.match(/.{1,4}/g).join('-')}`,
         m
       )
     }
 
-    if (connection === 'open') {
+    if (connection === 'open' && sock.authState.creds.registered) {
       global.conns.push(sock)
 
       await conn.reply(
@@ -91,6 +99,13 @@ async function startSubBot(sessionPath, m, conn) {
 
     if (connection === 'close') {
       global.conns = global.conns.filter(s => s !== sock)
+
+      const reason =
+        lastDisconnect?.error?.output?.statusCode
+
+      if (reason !== DisconnectReason.loggedOut) {
+        try { sock.ws.close() } catch {}
+      }
 
       console.log(
         chalk.red('[SUBBOT] Sesión cerrada')
