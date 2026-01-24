@@ -11,8 +11,7 @@ import {
   DisconnectReason
 } from '@whiskeysockets/baileys'
 
-import { makeWASocket, smsg } from '../lib/simple.js'
-import handlerMain from '../handler.js'
+import { makeWASocket } from '../lib/simple.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -72,18 +71,13 @@ async function startSubBot(sessionPath) {
       !codeSent
     ) {
       codeSent = true
-
       const code = await sock.requestPairingCode(
-        sock.user?.id?.split('@')[0]
+        sock.user.id.split('@')[0]
       )
-
-      const chat = global.conn?.user?.id
-      if (chat) {
-        await global.conn.sendMessage(
-          chat,
-          { text: `🔐 Código de vinculación\n\n${code.match(/.{1,4}/g).join('-')}` }
-        )
-      }
+      await global.conn.sendMessage(
+        global.conn.user.id,
+        { text: `🔐 Código de vinculación\n\n${code.match(/.{1,4}/g).join('-')}` }
+      )
     }
 
     if (connection === 'open' && sock.authState.creds.registered) {
@@ -101,11 +95,7 @@ async function startSubBot(sessionPath) {
     }
   })
 
-  sock.ev.on('messages.upsert', async ({ messages }) => {
-    for (const msg of messages) {
-      if (!msg.message) continue
-      const m = smsg(sock, msg)
-      await handlerMain(m, sock)
-    }
+  sock.ev.on('messages.upsert', async chatUpdate => {
+    global.conn.ev.emit('messages.upsert', chatUpdate)
   })
 }
