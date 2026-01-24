@@ -26,9 +26,6 @@ if (global.conns instanceof Array) console.log()
 else global.conns = []
 function isSubBotConnected(jid) { return global.conns.some(sock => sock?.user?.jid && sock.user.jid.split("@")[0] === jid.split("@")[0]) }
 let handler = async (m, { conn, args, usedPrefix, command, isOwner }) => {
-if (socklimit >= 50) {
-return m.reply(`ꕥ No se han encontrado espacios para *Sub-Bots* disponibles.`)
-}
 let mentionedJid = await m.mentionedJid
 let who = mentionedJid && mentionedJid[0] ? mentionedJid[0] : m.fromMe ? conn.user.jid : m.sender
 let id = `${who.split`@`[0]}`
