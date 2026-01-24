@@ -151,7 +151,7 @@ async function reloadHandler(restart) {
   if (restart) {
     try { conn.ws.close() } catch {}
     conn.ev.removeAllListeners()
-    global.conn = makeWASocket(connectionOptions)
+    global.conn = createMainSocket()
     isInit = true
   }
 
