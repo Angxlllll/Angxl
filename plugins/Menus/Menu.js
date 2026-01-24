@@ -31,7 +31,6 @@ let handler = async (m, { conn }) => {
   let userId = m.mentionedJid?.[0] || m.sender
   let uptime = clockString(process.uptime() * 1000)
 
-  // ⚡ cache instantáneo
   if (MENU_CACHE && Date.now() - MENU_TS < MENU_TTL) {
     return conn.sendMessage(
       m.chat,
