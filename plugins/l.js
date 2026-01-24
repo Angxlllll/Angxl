@@ -1,34 +1,33 @@
+import { useMultiFileAuthState, makeWASocket, fetchLatestBaileysVersion } from '@whiskeysockets/baileys'
 import fs from 'fs'
 import path from 'path'
-import pino from 'pino'
-import chalk from 'chalk'
-import { fileURLToPath } from 'url'
 
-import {
-  useMultiFileAuthState,
-  makeCacheableSignalKeyStore,
-  fetchLatestBaileysVersion,
-  DisconnectReason
-} from '@whiskeysockets/baileys'
+let handler = async (m, { conn }) => {
+  let id = m.sender.split('@')[0]
 
-import { makeWASocket } from '../lib/simple.js'
-
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
-
-global.conns ||= []
-
-let handler = async (m) => {
-  const id = m.sender.split('@')[0]
-  const sessionPath = path.join(__dirname, '../jadibot', id)
-
-  if (fs.existsSync(path.join(sessionPath, 'creds.json'))) {
-    return m.reply('⚠️ Ya tienes una sesión activa')
+  let sessionPath = path.join('./sessions', id)
+  if (fs.existsSync(sessionPath)) {
+    return m.reply('⚠️ Ya existe una sesión activa para este número')
   }
 
-  fs.mkdirSync(sessionPath, { recursive: true })
+  await m.reply('⏳ Generando código de vinculación...')
 
-  startSubBot(sessionPath)
+  const { state, saveCreds } = await useMultiFileAuthState(sessionPath)
+  const { version } = await fetchLatestBaileysVersion()
+
+  const sock = makeWASocket({
+    version,
+    auth: state,
+    printQRInTerminal: false
+  })
+
+  sock.ev.on('creds.update', saveCreds)
+
+  let code = await sock.requestPairingCode(id)
+
+  await conn.sendMessage(m.chat, {
+    text: `🔐 *CÓDIGO DE VINCULACIÓN*\n\n📱 Número: ${id}\n\n🧾 Código:\n${code}\n\n⏱ Válido por unos minutos`
+  })
 }
 
 handler.help = ['code']
@@ -36,66 +35,3 @@ handler.tags = ['serbot']
 handler.command = ['code']
 
 export default handler
-
-async function startSubBot(sessionPath) {
-  const { state, saveCreds } =
-    await useMultiFileAuthState(sessionPath)
-
-  const { version } =
-    await fetchLatestBaileysVersion()
-
-  const sock = makeWASocket({
-    logger: pino({ level: 'silent' }),
-    auth: {
-      creds: state.creds,
-      keys: makeCacheableSignalKeyStore(
-        state.keys,
-        pino({ level: 'silent' })
-      )
-    },
-    browser: ['Android', 'Chrome', '13'],
-    version,
-    printQRInTerminal: false
-  })
-
-  sock.ev.on('creds.update', saveCreds)
-
-  let codeSent = false
-
-  sock.ev.on('connection.update', async update => {
-    const { connection, lastDisconnect } = update
-
-    if (
-      connection === 'open' &&
-      !sock.authState.creds.registered &&
-      !codeSent
-    ) {
-      codeSent = true
-      const code = await sock.requestPairingCode(
-        sock.user.id.split('@')[0]
-      )
-      await global.conn.sendMessage(
-        global.conn.user.id,
-        { text: `🔐 Código de vinculación\n\n${code.match(/.{1,4}/g).join('-')}` }
-      )
-    }
-
-    if (connection === 'open' && sock.authState.creds.registered) {
-      global.conns.push(sock)
-      console.log(chalk.green(`[SUBBOT] ${sock.user.jid} conectado`))
-    }
-
-    if (connection === 'close') {
-      global.conns = global.conns.filter(s => s !== sock)
-      const reason = lastDisconnect?.error?.output?.statusCode
-      if (reason !== DisconnectReason.loggedOut) {
-        try { sock.ws.close() } catch {}
-      }
-      console.log(chalk.red('[SUBBOT] Sesión cerrada'))
-    }
-  })
-
-  sock.ev.on('messages.upsert', async chatUpdate => {
-    global.conn.ev.emit('messages.upsert', chatUpdate)
-  })
-}
