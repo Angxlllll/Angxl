@@ -47,7 +47,7 @@ let handler = async (m, { conn }) => {
     let code = await sock.requestPairingCode(id)
     code = code.match(/.{1,4}/g).join("-")
 
-    await conn.reply(
+    await m.reply(
       m.chat,
       `*╭─❒ VINCULACIÓN SUB-BOT*\n` +
       `*│*\n` +
