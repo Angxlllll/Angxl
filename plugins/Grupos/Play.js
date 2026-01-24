@@ -1,81 +1,80 @@
-import axios from "axios"
 import yts from "yt-search"
+import fetch from "node-fetch"
 
-const API_KEY = "Angxlllll"
-const API_URL = "https://api-adonix.ultraplus.click/ytmp3"
+const API_KEY  = "SHADOWKEYBOTMD"
+const API_BASE = "https://api-adonix.ultraplus.click"
 
-const handler = async (msg, { conn, args, usedPrefix, command }) => {
+const handler = async (m, { conn, args, usedPrefix, command }) => {
 
-  const chatId = msg.key.remoteJid
   const query = args.join(" ").trim()
-
   if (!query)
-    return conn.sendMessage(chatId, {
-      text: `✳️ Usa:\n${usedPrefix}${command} <nombre de canción>\nEj:\n${usedPrefix}${command} Karma Police`
-    }, { quoted: msg })
+    return m.reply(`✳️ Usa:\n${usedPrefix}${command} <nombre de canción>`)
 
-  await conn.sendMessage(chatId, { react: { text: "🕒", key: msg.key } }).catch(() => {})
 
   try {
-    /* 🔍 BUSCAR (ligero y rápido) */
+    /* 🔍 BÚSQUEDA */
     const search = await yts(query)
     const video = search?.videos?.[0]
-    if (!video) throw "No se encontró ningún resultado"
+    if (!video) throw "No encontré resultados"
 
-    const videoUrl = video.url
+    const {
+      title,
+      url,
+      thumbnail,
+      timestamp,
+      author
+    } = video
 
-    /* 🎧 API (URL → MP3) */
-    const res = await axios.get(API_URL, {
-      params: {
-        url: videoUrl,   // ✅ ESTO era lo que faltaba
-        apikey: API_KEY
-      },
-      headers: {
-        "User-Agent": "Mozilla/5.0",
-        "Accept": "application/json"
-      },
-      timeout: 30000
-    })
+    /* 🖼 INFO */
+    await conn.sendMessage(
+      m.chat,
+      {
+        image: { url: thumbnail },
+        caption: `
+🎵 *Título:* ${title}
+🎤 *Canal:* ${author?.name || "Desconocido"}
+🕑 *Duración:* ${timestamp}
 
-    const data = res?.data
-
-    if (
-      !data?.estado ||
-      !data?.datos?.url ||
-      !data.datos.url.startsWith("http")
-    ) throw "La API no devolvió un audio válido"
-
-    const title = data.datos.título || video.title
-    const duration = data.datos.duración || video.timestamp
-
-    /* 🖼️ INFO */
-    await conn.sendMessage(chatId, {
-      image: { url: video.thumbnail },
-      caption: `
-⭒ 🎵 *Título:* ${title}
-⭒ 🕑 *Duración:* ${duration}
-
-» Enviando audio 🎧
+» Descargando audio 🎧
 `.trim()
-    }, { quoted: msg })
+      },
+      { quoted: m }
+    )
+
+    /* 🎧 DESCARGA (API REAL) */
+    const apiUrl =
+      `${API_BASE}/download/ytaudio?url=${encodeURIComponent(url)}&apikey=${API_KEY}`
+
+    const res = await fetch(apiUrl)
+    const data = await res.json()
+
+    if (!data?.status || !data?.data?.url)
+      throw "La API no devolvió el audio"
+
+    const audioUrl = data.data.url
+    const cleanTitle = cleanName(data.data.title || title)
 
     /* ▶️ AUDIO */
-    await conn.sendMessage(chatId, {
-      audio: { url: data.datos.url },
-      mimetype: "audio/mpeg",
-      fileName: `${title}.mp3`
-    }, { quoted: msg })
-
-    await conn.sendMessage(chatId, { react: { text: "✅", key: msg.key } }).catch(() => {})
+    await conn.sendMessage(
+      m.chat,
+      {
+        audio: { url: audioUrl },
+        mimetype: "audio/mpeg",
+        fileName: `${cleanTitle}.mp3`,
+        ptt: false
+      },
+      { quoted: m }
+    )
 
   } catch (e) {
-    await conn.sendMessage(chatId, {
-      text: `❌ Error: ${typeof e === "string" ? e : "Fallo de la API"}`
-    }, { quoted: msg })
+    m.reply(`❌ Error: ${typeof e === "string" ? e : "Fallo interno"}`)
   }
 }
 
-handler.command = ["play", "ytplay"]
+const cleanName = (name) =>
+  name.replace(/[^\w\s-_.]/gi, "").substring(0, 60)
+
+handler.command = ["play"]
 handler.help = ["play <texto>"]
 handler.tags = ["descargas"]
 
