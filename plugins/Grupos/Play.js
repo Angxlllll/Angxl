@@ -1,8 +1,7 @@
 import axios from "axios"
-import yts from "yt-search"
 
 const API_KEY = "Angxlllll"
-const API_URL = "https://api-adonix.ultraplus.click" // 🔴 CAMBIA SOLO ESTO
+const API_URL = "https://api-adonix.ultraplus.click/ytmp3" // ✅ endpoint real
 
 const handler = async (msg, { conn, args, usedPrefix, command }) => {
 
@@ -14,28 +13,20 @@ const handler = async (msg, { conn, args, usedPrefix, command }) => {
       text: `✳️ Usa:\n${usedPrefix}${command} <nombre de canción>\nEj:\n${usedPrefix}${command} Karma Police`
     }, { quoted: msg })
 
-  conn.sendMessage(chatId, { react: { text: "🕒", key: msg.key } }).catch(() => {})
+  await conn.sendMessage(chatId, { react: { text: "🕒", key: msg.key } }).catch(() => {})
 
   try {
-    /* 🔍 BÚSQUEDA (ligera) */
-    const search = await yts(query)
-    const video = search?.videos?.[0]
-    if (!video) throw "No se encontró ningún resultado"
-
-    const link = video.url
-    const thumb = video.thumbnail
-
-    /* 🎧 LLAMADA ÚNICA A LA API */
+    /* 🎧 UNA SOLA LLAMADA (API TOTAL) */
     const res = await axios.get(API_URL, {
       params: {
-        url: link,
+        q: query,        // 🔑 la API busca por texto
         apikey: API_KEY
       },
       headers: {
         "User-Agent": "Mozilla/5.0",
         "Accept": "application/json"
       },
-      timeout: 25000
+      timeout: 30000
     })
 
     const data = res?.data
@@ -44,15 +35,14 @@ const handler = async (msg, { conn, args, usedPrefix, command }) => {
       !data?.estado ||
       !data?.datos?.url ||
       !data.datos.url.startsWith("http")
-    ) throw "La API no devolvió un audio válido"
+    ) throw "Respuesta inválida de la API"
 
-    const title = data.datos.título || video.title
+    const title = data.datos.título || query
     const duration = data.datos.duración || "Desconocida"
 
     /* 🖼️ INFO */
     await conn.sendMessage(chatId, {
-      image: { url: thumb },
-      caption: `
+      text: `
 ⭒ 🎵 *Título:* ${title}
 ⭒ 🕑 *Duración:* ${duration}
 
@@ -60,19 +50,18 @@ const handler = async (msg, { conn, args, usedPrefix, command }) => {
 `.trim()
     }, { quoted: msg })
 
-    /* ▶️ AUDIO DIRECTO */
+    /* ▶️ AUDIO */
     await conn.sendMessage(chatId, {
       audio: { url: data.datos.url },
       mimetype: "audio/mpeg",
-      fileName: `${title}.mp3`,
-      ptt: false
+      fileName: `${title}.mp3`
     }, { quoted: msg })
 
-    conn.sendMessage(chatId, { react: { text: "✅", key: msg.key } }).catch(() => {})
+    await conn.sendMessage(chatId, { react: { text: "✅", key: msg.key } }).catch(() => {})
 
   } catch (e) {
-    conn.sendMessage(chatId, {
-      text: `❌ Error: ${typeof e === "string" ? e : "Fallo interno"}`
+    await conn.sendMessage(chatId, {
+      text: `❌ Error: ${typeof e === "string" ? e : "Fallo de la API"}`
     }, { quoted: msg })
   }
 }
