@@ -16,7 +16,6 @@ let handler = async (m, { conn, args }) => {
   }).replace('a. m.', 'A.M').replace('p. m.', 'P.M')
 
   let userId = m.mentionedJid?.[0] || m.sender
-  let user = global.db.data.users[userId]
 
   let _uptime = process.uptime() * 1000
   let uptime = clockString(_uptime)
