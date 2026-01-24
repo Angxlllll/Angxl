@@ -1,66 +1,45 @@
-import fs from "fs"
-import path from "path"
-import { fileURLToPath } from "url"
+const handler = async (m) => {
+  const plugins = global.plugins || {}
 
-const __filename = fileURLToPath(import.meta.url)
-const __dirname  = path.dirname(__filename)
-const PLUGINS_DIR = path.resolve(__dirname, "..") // apunta a /plugins
-
-const handler = async (m, { conn }) => {
   let total = 0
   let ok = 0
   let errors = []
 
-  const walk = dir => {
-    for (const file of fs.readdirSync(dir)) {
-      const full = path.join(dir, file)
-      if (fs.statSync(full).isDirectory()) {
-        walk(full)
-      } else if (file.endsWith(".js")) {
-        total++
-        try {
-          const plugin = global.plugins?.[full]
+  for (const [name, plugin] of Object.entries(plugins)) {
+    total++
 
-          if (!plugin) {
-            errors.push(`❌ *No cargado*\n📄 ${full}`)
-            return
-          }
+    try {
+      const exec =
+        typeof plugin === "function"
+          ? plugin
+          : typeof plugin.default === "function"
+            ? plugin.default
+            : null
 
-          const exec =
-            typeof plugin === "function"
-              ? plugin
-              : typeof plugin.default === "function"
-                ? plugin.default
-                : null
-
-          if (!exec) {
-            errors.push(`❌ *Sin función exportada*\n📄 ${full}`)
-            return
-          }
-
-          if (!plugin.command) {
-            errors.push(`⚠️ *Sin command*\n📄 ${full}`)
-            return
-          }
-
-          if (plugin.disabled) {
-            errors.push(`🚫 *Plugin deshabilitado*\n📄 ${full}`)
-            return
-          }
-
-          ok++
-        } catch (e) {
-          errors.push(`💥 *Error al cargar*\n📄 ${full}\n🧨 ${e.message}`)
-        }
+      if (!exec) {
+        errors.push(`❌ *Sin función exportada*\n📄 ${name}`)
+        continue
       }
+
+      if (!plugin.command) {
+        errors.push(`⚠️ *Sin command*\n📄 ${name}`)
+        continue
+      }
+
+      if (plugin.disabled) {
+        errors.push(`🚫 *Plugin deshabilitado*\n📄 ${name}`)
+        continue
+      }
+
+      ok++
+    } catch (e) {
+      errors.push(`💥 *Error interno*\n📄 ${name}\n🧨 ${e.message}`)
     }
   }
 
-  walk(PLUGINS_DIR)
-
-  let txt = `🧩 *REVISIÓN DE PLUGINS*\n\n`
-  txt += `📦 Total encontrados: ${total}\n`
-  txt += `✅ Funcionales: ${ok}\n`
+  let txt = `🧩 *REVISIÓN REAL DE PLUGINS*\n\n`
+  txt += `📦 Plugins cargados: ${total}\n`
+  txt += `✅ Operativos: ${ok}\n`
   txt += `❌ Con problemas: ${errors.length}\n`
 
   if (errors.length) {
