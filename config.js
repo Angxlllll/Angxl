@@ -24,11 +24,11 @@ global.sessions = global.bot.session
 global.banner = global.bot.banner
 
 global.APIs = Object.freeze({
-  may: 'https://api-adonix.ultraplus.click'
+  may: 'https://mayapi.ooguy.com'
 })
 
 global.APIKeys = Object.freeze({
-  may: process.env.MAY_API_KEY ?? 'SHADOWKEYBOTMD'
+  may: process.env.MAY_API_KEY ?? 'may-684934ab'
 })
 
 global.__filename = path => fileURLToPath(path)
