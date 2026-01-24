@@ -1,7 +1,8 @@
 import axios from "axios"
+import yts from "yt-search"
 
 const API_KEY = "Angxlllll"
-const API_URL = "https://api-adonix.ultraplus.click/ytmp3" // ✅ endpoint real
+const API_URL = "https://api-adonix.ultraplus.click/ytmp3"
 
 const handler = async (msg, { conn, args, usedPrefix, command }) => {
 
@@ -16,10 +17,17 @@ const handler = async (msg, { conn, args, usedPrefix, command }) => {
   await conn.sendMessage(chatId, { react: { text: "🕒", key: msg.key } }).catch(() => {})
 
   try {
-    /* 🎧 UNA SOLA LLAMADA (API TOTAL) */
+    /* 🔍 BUSCAR (ligero y rápido) */
+    const search = await yts(query)
+    const video = search?.videos?.[0]
+    if (!video) throw "No se encontró ningún resultado"
+
+    const videoUrl = video.url
+
+    /* 🎧 API (URL → MP3) */
     const res = await axios.get(API_URL, {
       params: {
-        q: query,        // 🔑 la API busca por texto
+        url: videoUrl,   // ✅ ESTO era lo que faltaba
         apikey: API_KEY
       },
       headers: {
@@ -35,14 +43,15 @@ const handler = async (msg, { conn, args, usedPrefix, command }) => {
       !data?.estado ||
       !data?.datos?.url ||
       !data.datos.url.startsWith("http")
-    ) throw "Respuesta inválida de la API"
+    ) throw "La API no devolvió un audio válido"
 
-    const title = data.datos.título || query
-    const duration = data.datos.duración || "Desconocida"
+    const title = data.datos.título || video.title
+    const duration = data.datos.duración || video.timestamp
 
     /* 🖼️ INFO */
     await conn.sendMessage(chatId, {
-      text: `
+      image: { url: video.thumbnail },
+      caption: `
 ⭒ 🎵 *Título:* ${title}
 ⭒ 🕑 *Duración:* ${duration}
 
