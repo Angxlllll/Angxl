@@ -84,6 +84,10 @@ const connectionOptions = {
   keepAliveIntervalMs: 55000
 }
 
+function createMainSocket() {
+  return makeWASocket(connectionOptions)
+}
+
 global.conn = createMainSocket()
 
 await new Promise(resolve => {
