@@ -84,12 +84,7 @@ const connectionOptions = {
   keepAliveIntervalMs: 55000
 }
 
-function createMainSocket() {
-  return makeWASocket(connectionOptions)
-}
-
-global.conn = createMainSocket()
-const conn = global.conn
+global.conn = makeWASocket(connectionOptions)
 
 await new Promise(resolve => {
   const wait = u => {
@@ -156,7 +151,7 @@ async function reloadHandler(restart) {
   if (restart) {
     try { conn.ws.close() } catch {}
     conn.ev.removeAllListeners()
-    global.conn = createMainSocket()
+    global.conn = makeWASocket(connectionOptions)
     isInit = true
   }
 
