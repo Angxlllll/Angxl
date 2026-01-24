@@ -6,8 +6,9 @@ const API_KEY  = global.APIKeys?.may || ""
 
 const handler = async (m, { conn, args, usedPrefix, command }) => {
 
-  const chatId = m.chat
-  const query = args.join(" ").trim()
+  const chatId = m.
+  const query = args.join(" ").trim(
+
 
   if (!query)
     return m.reply(
@@ -18,7 +19,9 @@ const handler = async (m, { conn, args, usedPrefix, command }) => {
     await m.react?.("🕒")
 
     const search = await yts(query)
-    const video = search?.videos?.[0]
+    const video = search?.vios?.[0]
+
+
     if (!video) throw "No se encontró ningún resultado"
 
     await conn.sendMessage(chatId, {
@@ -58,5 +61,3 @@ const handler = async (m, { conn, args, usedPrefix, command }) => {
 handler.command = ["play", "ytplay"]
 handler.tags = ["descargas"]
 handler.help = ["play <texto>"]
-
-export default handler
