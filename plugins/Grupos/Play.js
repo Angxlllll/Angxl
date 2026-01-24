@@ -1,73 +1,84 @@
+import axios from "axios"
 import yts from "yt-search"
-import fetch from "node-fetch"
 
-const handler = async (m, { conn, text }) => {
-  if (!text) return m.reply("❀ Ingresa el nombre o link del video de YouTube.")
+const API_BASE = (global.APIs?.may || "").replace(/\/+$/, "")
+const API_KEY  = global.APIKeys?.may || ""
 
+const handler = async (msg, { conn, args, usedPrefix, command }) => {
+
+  const chatId = msg.key.remoteJid
+  const query = args.join(" ").trim()
+
+  if (!query)
+    return conn.sendMessage(chatId, {
+      text: `✳️ Usa:\n${usedPrefix}${command} <nombre de canción>\nEj:\n${usedPrefix}${command} no surprises`
+    }, { quoted: msg })
+
+  conn.sendMessage(chatId, { react: { text: "🕒", key: msg.key } }).catch(() => {})
 
   try {
-    let url = text
-    let title = "Desconocido"
-    let thumbnail = ""
+    const search = await yts(query)
+    const video = search?.videos?.[0]
+    if (!video) throw "No se encontró ningún resultado"
 
-    // 🔎 Buscar si no es link
-    if (!/^https?:\/\//i.test(text)) {
-      const res = await yts(text)
-      if (!res?.videos?.length) return m.reply("🚫 No encontré resultados.")
-      const video = res.videos[0]
-      title = video.title
-      url = video.url
-      thumbnail = video.thumbnail
-    }
+    const title    = video.title
+    const author   = video.author?.name || "Desconocido"
+    const duration = video.timestamp || "Desconocida"
+    const thumb    = video.thumbnail || "https://i.ibb.co/3vhYnV0/default.jpg"
+    const link     = video.url
 
-    // 📥 Descargar audio
-    const apiUrl = `https://api-adonix.ultraplus.click/download/ytaudio?url=${encodeURIComponent(url)}&apikey=SHADOWKEYBOTMD`
-    const r = await fetch(apiUrl)
-    const json = await r.json()
+    conn.sendMessage(chatId, {
+      image: { url: thumb },
+      caption: `
+⭒ ִֶָ७ ꯭🎵˙⋆｡ - *Título:* ${title}
+⭒ ִֶָ७ ꯭🎤˙⋆｡ - *Artista:* ${author}
+⭒ ִֶָ७ ꯭🕑˙⋆｡ - *Duración:* ${duration}
+`.trim()
+    }, { quoted: msg }).catch(() => {})
 
-    if (!json?.status || !json?.data?.url) {
-      return m.reply("❌ No se pudo descargar el audio.")
-    }
-
-    const audioUrl = json.data.url
-    const fileName = cleanName(json.data.title || title)
-
-    // 🖼️ Miniatura (opcional)
-    if (thumbnail) {
-      const thumb = (await conn.getFile(thumbnail)).data
-      await conn.sendMessage(
-        m.chat,
-        {
-          image: thumb,
-          caption: `🎵 *${fileName}*\n\n⬇️ Descargando audio...`
-        },
-        { quoted: m }
-      )
-    }
-
-    // 🎧 Enviar audio
-    await conn.sendMessage(
-      m.chat,
-      {
-        audio: { url: audioUrl },
-        mimetype: "audio/mpeg",
-        fileName: fileName + ".mp3"
+    const res = await axios.get(`${API_BASE}/ytdl`, {
+      params: {
+        url: link,
+        type: "Mp3",
+        apikey: API_KEY
       },
-      { quoted: m }
-    )
+      headers: {
+        "User-Agent": "Mozilla/5.0",
+        "Accept": "application/json"
+      },
+      timeout: 20000
+    })
 
+    const data = res?.data
+    const audioUrl = data?.result?.url
+
+    if (
+      !data?.status ||
+      !audioUrl ||
+      typeof audioUrl !== "string" ||
+      !audioUrl.startsWith("http")
+    ) throw "La API no devolvió un audio válido"
+
+    const cleanTitle = (data.result.title || title).replace(/\.mp3$/i, "")
+
+    await conn.sendMessage(chatId, {
+      audio: { url: audioUrl },
+      mimetype: "audio/mpeg",
+      fileName: `${cleanTitle}.mp3`,
+      ptt: false
+    }, { quoted: msg })
+
+    conn.sendMessage(chatId, { react: { text: "✅", key: msg.key } }).catch(() => {})
 
   } catch (e) {
-    console.error(e)
-    m.reply("❌ Error: " + e.message)
+    conn.sendMessage(chatId, {
+      text: `❌ Error: ${typeof e === "string" ? e : "Fallo interno"}`
+    }, { quoted: msg })
   }
 }
 
-handler.command = ["play", "ytaudio"]
-handler.tags = ["descargas"]
+handler.command = ["play", "ytplay"]
+handler.help    = ["play <texto>"]
+handler.tags    = ["descargas"]
 
 export default handler
-
-// 🧼 Limpia nombres de archivo
-const cleanName = (name) =>
-  name.replace(/[^\w\s.-]/gi, "").substring(0, 60)
