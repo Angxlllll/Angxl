@@ -18,7 +18,7 @@ const handler = async (m, { conn, command }) => {
   const sessionPath = path.join('./jadibot', id)
 
   if (fs.existsSync(sessionPath)) {
-    await m.reply('⚠️ Ya existe una sesión activa')
+    await m.reply('⚠️ Ya tienes una sesión activa')
     return
   }
 
@@ -57,39 +57,42 @@ async function startSubBot(m, conn, sessionPath) {
 
   sock.ev.on('creds.update', saveCreds)
 
-  sock.ev.once('connection.update', async update => {
-    if (update.connection !== 'open') return
+  let codeSent = false
 
-    try {
-      let code = await sock.requestPairingCode(
-        m.sender.split('@')[0]
-      )
+  sock.ev.on('connection.update', async update => {
+    const { connection } = update
 
-      code = code.match(/.{1,4}/g).join('-')
+    if (connection === 'open' && !codeSent && !state.creds.registered) {
+      codeSent = true
+      try {
+        let code = await sock.requestPairingCode(
+          m.sender.split('@')[0]
+        )
 
-      await conn.sendMessage(
-        m.chat,
-        {
-          text:
-            '❐ Vinculación por código\n\n' +
-            'Ingresa este código en *Dispositivos vinculados*\n\n' +
-            'Código:\n\n' +
-            code +
-            '\n\n⏱ Expira en 1 minuto'
-        },
-        { quoted: m }
-      )
-    } catch (e) {
-      fs.rmSync(sessionPath, { recursive: true, force: true })
-      await m.reply('⚠️ No se pudo generar el código.')
+        code = code.match(/.{1,4}/g).join('-')
+
+        await conn.sendMessage(
+          m.chat,
+          {
+            text:
+              '❐ Vinculación por código\n\n' +
+              'Ingresa este código en *Dispositivos vinculados*\n\n' +
+              'Código:\n\n' +
+              code +
+              '\n\n⏱ Expira en 1 minuto'
+          },
+          { quoted: m }
+        )
+      } catch (e) {
+        fs.rmSync(sessionPath, { recursive: true, force: true })
+        await m.reply('⚠️ No se pudo generar el código.')
+      }
     }
-  })
 
-  sock.ev.on('connection.update', update => {
-    if (update.connection === 'open' && state.creds.registered) {
+    if (connection === 'open' && state.creds.registered) {
       global.conns.push(sock)
 
-      conn.sendMessage(
+      await conn.sendMessage(
         m.chat,
         {
           text:
@@ -101,7 +104,7 @@ async function startSubBot(m, conn, sessionPath) {
       )
     }
 
-    if (update.connection === 'close') {
+    if (connection === 'close') {
       try {
         fs.rmSync(sessionPath, { recursive: true, force: true })
       } catch {}
