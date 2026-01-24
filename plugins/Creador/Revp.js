@@ -1,58 +1,52 @@
-const handler = async (m) => {
-  const plugins = global.plugins || {}
+import fs from 'fs'
+import path from 'path'
+import syntaxerror from 'syntax-error'
+
+const handler = async (m, { conn }) => {
+  const pluginRoot = path.join(process.cwd(), 'plugins')
 
   let total = 0
-  let ok = 0
-  let errors = []
+  let errores = []
 
-  for (const [name, plugin] of Object.entries(plugins)) {
-    total++
+  function revisar(dir) {
+    for (const file of fs.readdirSync(dir)) {
+      const full = path.join(dir, file)
 
-    try {
-      const exec =
-        typeof plugin === "function"
-          ? plugin
-          : typeof plugin.default === "function"
-            ? plugin.default
-            : null
+      if (fs.statSync(full).isDirectory()) {
+        revisar(full)
+      } else if (file.endsWith('.js')) {
+        total++
 
-      if (!exec) {
-        errors.push(`❌ *Sin función exportada*\n📄 ${name}`)
-        continue
+        const err = syntaxerror(
+          fs.readFileSync(full),
+          file,
+          { sourceType: 'module', allowAwaitOutsideFunction: true }
+        )
+
+        if (err) {
+          errores.push(`✗ ${path.relative(pluginRoot, full)}\n${err.message}`)
+        }
       }
-
-      if (!plugin.command) {
-        errors.push(`⚠️ *Sin command*\n📄 ${name}`)
-        continue
-      }
-
-      if (plugin.disabled) {
-        errors.push(`🚫 *Plugin deshabilitado*\n📄 ${name}`)
-        continue
-      }
-
-      ok++
-    } catch (e) {
-      errors.push(`💥 *Error interno*\n📄 ${name}\n🧨 ${e.message}`)
     }
   }
 
-  let txt = `🧩 *REVISIÓN REAL DE PLUGINS*\n\n`
-  txt += `📦 Plugins cargados: ${total}\n`
-  txt += `✅ Operativos: ${ok}\n`
-  txt += `❌ Con problemas: ${errors.length}\n`
+  revisar(pluginRoot)
 
-  if (errors.length) {
-    txt += `\n──────────────\n`
-    txt += errors.join("\n\n")
+  let text = `📦 *REVISIÓN DE PLUGINS*\n\n`
+  text += `• Total encontrados: *${total}*\n`
+  text += `• Con errores: *${errores.length}*\n\n`
+
+  if (errores.length) {
+    text += `⚠️ *Errores detectados:*\n\n`
+    text += errores.join('\n\n')
+  } else {
+    text += `✅ No se detectaron errores de sintaxis`
   }
 
-  await m.reply(txt)
+  m.reply(text)
 }
 
-handler.command = ["revp"]
+handler.command = ['revp']
 handler.owner = true
-handler.tags = ["dev"]
-handler.help = ["revp"]
 
 export default handler
