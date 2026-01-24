@@ -23,7 +23,6 @@ const handler = async (m, { conn, command }) => {
   }
 
   fs.mkdirSync(sessionPath, { recursive: true })
-
   startSubBot(m, conn, sessionPath)
 }
 
@@ -57,13 +56,13 @@ async function startSubBot(m, conn, sessionPath) {
 
   sock.ev.on('creds.update', saveCreds)
 
-  let codeSent = false
+  let pairingRequested = false
 
   sock.ev.on('connection.update', async update => {
     const { connection } = update
 
-    if (connection === 'open' && !codeSent && !state.creds.registered) {
-      codeSent = true
+    if (connection === 'connecting' && !pairingRequested) {
+      pairingRequested = true
       try {
         let code = await sock.requestPairingCode(
           m.sender.split('@')[0]
@@ -76,7 +75,7 @@ async function startSubBot(m, conn, sessionPath) {
           {
             text:
               '❐ Vinculación por código\n\n' +
-              'Ingresa este código en *Dispositivos vinculados*\n\n' +
+              'Ve a WhatsApp > Dispositivos vinculados\n\n' +
               'Código:\n\n' +
               code +
               '\n\n⏱ Expira en 1 minuto'
@@ -89,9 +88,8 @@ async function startSubBot(m, conn, sessionPath) {
       }
     }
 
-    if (connection === 'open' && state.creds.registered) {
+    if (connection === 'open') {
       global.conns.push(sock)
-
       await conn.sendMessage(
         m.chat,
         {
