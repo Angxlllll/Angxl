@@ -48,5 +48,6 @@ const handler = async (m, { conn }) => {
 
 handler.command = ['revp']
 handler.owner = true
-
+handler.help = ['𝖱𝖾𝗏𝗉']
+handler.tags = ['𝖮𝖶𝖭𝖤𝖱']
 export default handler
