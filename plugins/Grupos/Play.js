@@ -4,7 +4,6 @@ import fetch from "node-fetch"
 const handler = async (m, { conn, text }) => {
   if (!text) return m.reply("❀ Ingresa el nombre o link del video de YouTube.")
 
-  await m.react("🕘")
 
   try {
     let url = text
@@ -57,18 +56,15 @@ const handler = async (m, { conn, text }) => {
       { quoted: m }
     )
 
-    await m.react("✅")
 
   } catch (e) {
     console.error(e)
     m.reply("❌ Error: " + e.message)
-    await m.react("⚠️")
   }
 }
 
 handler.command = ["play", "ytaudio"]
 handler.tags = ["descargas"]
-handler.register = true
 
 export default handler
 
