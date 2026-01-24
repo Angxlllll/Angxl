@@ -1,163 +1,84 @@
+import axios from "axios"
 import yts from "yt-search"
-import fetch from "node-fetch"
 
-const handler = async (m, { conn, text, usedPrefix, command }) => {
-  if (!text) return m.reply(" `Ingresa el nombre del video de YouTube`.")
+const API_BASE = (global.APIs?.may || "").replace(/\/+$/, "")
+const API_KEY  = global.APIKeys?.may || ""
 
-  await m.react("🕘")
+const handler = async (msg, { conn, args, usedPrefix, command }) => {
+
+  const chatId = msg.key.remoteJid
+  const query = args.join(" ").trim()
+
+  if (!query)
+    return conn.sendMessage(chatId, {
+      text: `✳️ Usa:\n${usedPrefix}${command} <nombre de canción>\nEj:\n${usedPrefix}${command} no surprises`
+    }, { quoted: msg })
+
+  conn.sendMessage(chatId, { react: { text: "🕒", key: msg.key } }).catch(() => {})
 
   try {
-    let url = text
-    let title = "Desconocido"
-    let authorName = "Desconocido"
-    let durationTimestamp = "Desconocida"
-    let views = "Desconocidas"
-    let thumbnail = ""
+    const search = await yts(query)
+    const video = search?.videos?.[0]
+    if (!video) throw "No se encontró ningún resultado"
 
-    if (!text.startsWith("https://")) {
-      const res = await yts(text)
-      if (!res?.videos?.length) return m.reply("🚫 No encontré nada.")
-      const video = res.videos[0]
-      title = video.title
-      authorName = video.author?.name
-      durationTimestamp = video.timestamp
-      views = video.views
-      url = video.url
-      thumbnail = video.thumbnail
-    }
+    const title    = video.title
+    const author   = video.author?.name || "Desconocido"
+    const duration = video.timestamp || "Desconocida"
+    const thumb    = video.thumbnail || "https://i.ibb.co/3vhYnV0/default.jpg"
+    const link     = video.url
 
-    const vistas = formatViews(views)
+    conn.sendMessage(chatId, {
+      image: { url: thumb },
+      caption: `
+⭒ ִֶָ७ ꯭🎵˙⋆｡ - *Título:* ${title}
+⭒ ִֶָ७ ꯭🎤˙⋆｡ - *Artista:* ${author}
+⭒ ִֶָ७ ꯭🕑˙⋆｡ - *Duración:* ${duration}
+`.trim()
+    }, { quoted: msg }).catch(() => {})
 
-    const res3 = await fetch("https://files.catbox.moe/wfd0ze.jpg")
-    const thumb3 = Buffer.from(await res3.arrayBuffer())
-
-    const fkontak = {
-      key: { fromMe: false, participant: "0@s.whatsapp.net" },
-      message: {
-        documentMessage: {
-          title: `『 ${title} 』`,
-          fileName: global.botname || "Shadow Bot",
-          jpegThumbnail: thumb3
-        }
-      }
-    }
-
-    const caption = `
-✧━───『 𝙸𝚗𝚏𝚘 𝚍𝚎𝚕 𝚅𝚒𝚍𝚎𝚘 』───━✧
-
-🎼 𝑻𝒊́𝒕𝒖𝒍𝒐: ${title}
-📺 𝑪𝒂𝒏𝒂𝒍: ${authorName}
-👁️ 𝑽𝒊𝒔𝒕𝒂𝒔: ${vistas}
-⏳ 𝑫𝒖𝒓𝒂𝒄𝒊𝒐́𝒏: ${durationTimestamp}
-🌐 𝑬𝒏𝒍𝒂𝒄𝒆: ${url}
-
-✧━───『 YUKI-BOT 』───━✧
-⚡ 𝑷𝒐𝒘𝒆𝒓𝒆𝒅 𝒃𝒚 Gabrie-ux ⚡
-`
-
-    const thumb = (await conn.getFile(thumbnail)).data
-    await conn.sendMessage(
-      m.chat,
-      {
-        image: thumb,
-        caption,
-        footer: "⚡ yuki — Descargas rápidas ⚡",
-        buttons: [
-          { buttonId: `shadowaudio ${url}`, buttonText: { displayText: "🎵 𝘿𝙚𝙨𝙘𝙖𝙧𝙜𝙖𝙧 𝘼𝙪𝙙𝙞𝙤" }, type: 1 },
-          { buttonId: `shadowvideo ${url}`, buttonText: { displayText: "🎬 𝘿𝙚𝙨𝙘𝙖𝙧𝙜𝙖𝙧 𝙑𝙞𝙙𝙚𝙤" }, type: 1 }
-        ],
-        headerType: 4
+    const res = await axios.get(`${API_BASE}/ytdl`, {
+      params: {
+        url: link,
+        type: "Mp3",
+        apikey: API_KEY
       },
-      { quoted: fkontak }
-    )
+      headers: {
+        "User-Agent": "Mozilla/5.0",
+        "Accept": "application/json"
+      },
+      timeout: 20000
+    })
 
-    await m.react("✅")
+    const data = res?.data
+    const audioUrl = data?.result?.url
+
+    if (
+      !data?.status ||
+      !audioUrl ||
+      typeof audioUrl !== "string" ||
+      !audioUrl.startsWith("http")
+    ) throw "La API no devolvió un audio válido"
+
+    const cleanTitle = (data.result.title || title).replace(/\.mp3$/i, "")
+
+    await conn.sendMessage(chatId, {
+      audio: { url: audioUrl },
+      mimetype: "audio/mpeg",
+      fileName: `${cleanTitle}.mp3`,
+      ptt: false
+    }, { quoted: msg })
+
+    conn.sendMessage(chatId, { react: { text: "✅", key: msg.key } }).catch(() => {})
+
   } catch (e) {
-    m.reply("❌ Error: " + e.message)
-    m.react("⚠️")
+    conn.sendMessage(chatId, {
+      text: `❌ Error: ${typeof e === "string" ? e : "Fallo interno"}`
+    }, { quoted: msg })
   }
 }
 
-handler.before = async (m, { conn }) => {
-  const selected = m?.message?.buttonsResponseMessage?.selectedButtonId
-  if (!selected) return
-
-  const parts = selected.split(" ")
-  const cmd = parts.shift()
-  const url = parts.join(" ")
-
-  if (cmd === "shadowaudio") {
-    return downloadMedia(conn, m, url, "mp3")
-  }
-
-  if (cmd === "shadowvideo") {
-    return downloadMedia(conn, m, url, "mp4")
-  }
-}
-
-const fetchBuffer = async (url) => {
-  const response = await fetch(url)
-  return await response.buffer()
-}
-
-const downloadMedia = async (conn, m, url, type) => {
-  try {
-    const msg = type === "mp3"
-      ? "🎵 Descargando audio..."
-      : "🎬 Descargando video..."
-
-    const sent = await conn.sendMessage(m.chat, { text: msg }, { quoted: m })
-
-    const apiUrl = type === "mp3"
-      ? `https://api-adonix.ultraplus.click/download/ytaudio?url=${encodeURIComponent(url)}&apikey=SHADOWKEYBOTMD`
-      : `https://api-adonix.ultraplus.click/download/ytvideo?url=${encodeURIComponent(url)}&apikey=SHADOWKEYBOTMD`
-
-    const r = await fetch(apiUrl)
-    const data = await r.json()
-
-    if (!data?.status || !data?.data?.url) return m.reply("🚫 No se pudo descargar el archivo.")
-
-    const fileUrl = data.data.url
-    const fileTitle = cleanName(data.data.title || "video")
-
-    if (type === "mp3") {
-      const audioBuffer = await fetchBuffer(fileUrl)
-      await conn.sendMessage(
-        m.chat,
-        { audio: audioBuffer, mimetype: "audio/mpeg", fileName: fileTitle + ".mp3" },
-        { quoted: m }
-      )
-    } else {
-      await conn.sendMessage(
-        m.chat,
-        { video: { url: fileUrl }, mimetype: "video/mp4", fileName: fileTitle + ".mp4" },
-        { quoted: m }
-      )
-    }
-
-    await conn.sendMessage(
-      m.chat,
-      { text: `✅ Descarga completada\n\n🎼 Título: ${fileTitle}`, edit: sent.key }
-    )
-
-    await m.react("✅")
-  } catch (e) {
-    console.error(e)
-    m.reply("❌ Error: " + e.message)
-    m.react("💀")
-  }
-}
-
-const cleanName = (name) => name.replace(/[^\w\s-_.]/gi, "").substring(0, 50)
-const formatViews = (views) => {
-  if (views === undefined || views === null) return "No disponible"
-  if (views >= 1000000000) return `${(views / 1000000000).toFixed(1)}B`
-  if (views >= 1000000) return `${(views / 1000000).toFixed(1)}M`
-  if (views >= 1000) return `${(views / 1000).toFixed(1)}K`
-  return views.toString()
-}
-
-handler.command = ["play", "yt", "ytsearch"]
-handler.tags = ["descargas"]
+handler.command = ["play", "ytplay"]
+handler.help    = ["play <texto>"]
+handler.tags    = ["descargas"]
 
 export default handler
