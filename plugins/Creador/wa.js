@@ -76,4 +76,6 @@ const handler = async (msg, { conn, args }) => {
 }
 
 handler.command = ["wa", "banverify", "checkban", "check"]
+handler.help = ['𝖶𝖺']
+handler.tags = ['𝖮𝖶𝖭𝖤𝖱']
 export default handler
