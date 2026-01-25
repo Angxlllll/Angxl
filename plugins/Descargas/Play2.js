@@ -20,7 +20,6 @@ function cleanTempDirs() {
 
   for (const dir of dirs) {
     if (!dir || !fs.existsSync(dir)) continue
-
     for (const file of fs.readdirSync(dir)) {
       const full = path.join(dir, file)
       try {
@@ -35,6 +34,8 @@ function cleanTempDirs() {
 const handler = async (msg, { conn, args, usedPrefix, command }) => {
   const chatId = msg.key.remoteJid
   const query = args.join(" ").trim()
+
+  cleanTempDirs()
 
   if (!query)
     return conn.sendMessage(chatId, {
@@ -52,12 +53,6 @@ const handler = async (msg, { conn, args, usedPrefix, command }) => {
 
     const video = search.videos[0]
 
-    if (video.seconds > 480) {
-      return conn.sendMessage(chatId, {
-        text: "❌ Video demasiado largo (máx 8 minutos)"
-      }, { quoted: msg })
-    }
-
     const title     = video.title
     const author    = video.author?.name || "Desconocido"
     const duration  = video.timestamp || "Desconocida"
@@ -68,6 +63,12 @@ const handler = async (msg, { conn, args, usedPrefix, command }) => {
 ⭒ ִֶָ७ ꯭🎤˙⋆｡ - *𝙰𝚞𝚝𝚘𝚛:* ${author}
 ⭒ ִֶָ७ ꯭🕑˙⋆｡ - *𝙳𝚞𝚛𝚊𝚌𝚒ó𝚗:* ${duration}
 `.trim()
+
+    if (video.seconds > 480) {
+      return conn.sendMessage(chatId, {
+        text: "❌ Video demasiado largo (máx 8 minutos)"
+      }, { quoted: msg })
+    }
 
     const res = await axios.get(`${API_BASE}/ytdl`, {
       params: {
