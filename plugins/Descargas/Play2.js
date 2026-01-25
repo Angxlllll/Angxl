@@ -4,7 +4,7 @@ import fs from "fs"
 import path from "path"
 
 const API_BASE = (global.APIs?.may || "").replace(/\/+$/, "")
-const API_KEY  = global.APIKeys?.may || ""
+const API_KEY = global.APIKeys?.may || ""
 
 const tmpDir = path.join(process.cwd(), "tmp")
 if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true })
@@ -19,29 +19,35 @@ function cleanTmpDir() {
   }
 }
 
-const handler = async (msg, { conn, args, usedPrefix, command }) => {
-  const chatId = msg.key.remoteJid
+const handler = async (m, { conn, args, usedPrefix, command }) => {
+  const chatId = m.key.remoteJid
   const query = args.join(" ").trim()
 
   cleanTmpDir()
 
-  if (!query)
+  if (!query) {
     return conn.sendMessage(chatId, {
-      text: `✳️ Usa:\n${usedPrefix}${command} <nombre del video>\nEj:\n${usedPrefix}${command} karma police`
-    }, { quoted: msg })
+      text: `✳️ Usa:\n${usedPrefix}${command} <nombre del video>\nEj:\n${usedPrefix}${command} suiza`
+    }, { quoted: m })
+  }
 
-  await conn.sendMessage(chatId, { react: { text: "🎬", key: msg.key } })
+  await conn.sendMessage(chatId, { react: { text: "🎬", key: m.key } })
 
   try {
     const search = await yts(query)
-    if (!search?.videos?.length)
-      throw new Error("No se encontraron resultados")
+    if (!search?.videos?.length) throw "No se encontraron resultados"
 
     const video = search.videos[0]
 
-    const title     = video.title
-    const author    = video.author?.name || "Desconocido"
-    const duration  = video.timestamp || "Desconocida"
+    if (video.seconds > 480) {
+      return conn.sendMessage(chatId, {
+        text: "❌ Video demasiado largo (máx 8 minutos)"
+      }, { quoted: m })
+    }
+
+    const title = video.title
+    const author = video.author?.name || "Desconocido"
+    const duration = video.timestamp || "Desconocida"
     const videoLink = video.url
 
     const caption = `
@@ -50,38 +56,35 @@ const handler = async (msg, { conn, args, usedPrefix, command }) => {
 ⭒ ִֶָ७ ꯭🕑˙⋆｡ - *𝙳𝚞𝚛𝚊𝚌𝚒ó𝚗:* ${duration}
 `.trim()
 
-    if (video.seconds > 480) {
-      return conn.sendMessage(chatId, {
-        text: "❌ Video demasiado largo (máx 8 minutos)"
-      }, { quoted: msg })
-    }
-
-    const res = await axios.get(`${API_BASE}/ytdl`, {
+    const apiRes = await axios.get(`${API_BASE}/ytdl`, {
       params: { url: videoLink, type: "Mp4", apikey: API_KEY },
-      responseType: "arraybuffer",
-      headers: { "User-Agent": "Mozilla/5.0", "Accept": "application/json" },
       timeout: 20000
     })
 
-    if (!res?.data) throw new Error("La API no devolvió el video")
+    if (!apiRes?.data?.result?.url) throw "La API no devolvió el link del video"
+
+    const videoDownload = await axios.get(apiRes.data.result.url, {
+      responseType: "arraybuffer",
+      timeout: 30000
+    })
 
     const videoPath = path.join(tmpDir, `${Date.now()}.mp4`)
-    fs.writeFileSync(videoPath, Buffer.from(res.data))
+    fs.writeFileSync(videoPath, videoDownload.data)
 
     await conn.sendMessage(chatId, {
       video: fs.readFileSync(videoPath),
       caption,
       mimetype: "video/mp4"
-    }, { quoted: msg })
+    }, { quoted: m })
 
-    await conn.sendMessage(chatId, { react: { text: "✅", key: msg.key } })
+    await conn.sendMessage(chatId, { react: { text: "✅", key: m.key } })
 
     cleanTmpDir()
-  } catch (err) {
+  } catch (e) {
     cleanTmpDir()
     await conn.sendMessage(chatId, {
-      text: `❌ Error: ${err?.message || "Fallo interno"}`
-    }, { quoted: msg })
+      text: `❌ Error: ${e?.message || e}`
+    }, { quoted: m })
   }
 }
 
