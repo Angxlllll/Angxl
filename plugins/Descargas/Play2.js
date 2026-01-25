@@ -2,32 +2,20 @@ import axios from "axios"
 import yts from "yt-search"
 import fs from "fs"
 import path from "path"
-import os from "os"
 
 const API_BASE = (global.APIs?.may || "").replace(/\/+$/, "")
 const API_KEY  = global.APIKeys?.may || ""
 
-function cleanTempDirs() {
-  const dirs = new Set([
-    os.tmpdir(),
-    "/tmp",
-    "/var/tmp",
-    "./tmp",
-    "./media",
-    "./.cache",
-    "./.npm"
-  ])
+const tmpDir = path.join(process.cwd(), "tmp")
+if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true })
 
-  for (const dir of dirs) {
-    if (!dir || !fs.existsSync(dir)) continue
-    for (const file of fs.readdirSync(dir)) {
-      const full = path.join(dir, file)
-      try {
-        if (fs.statSync(full).isFile()) {
-          fs.unlinkSync(full)
-        }
-      } catch {}
-    }
+function cleanTmpDir() {
+  if (!fs.existsSync(tmpDir)) return
+  for (const file of fs.readdirSync(tmpDir)) {
+    const full = path.join(tmpDir, file)
+    try {
+      if (fs.statSync(full).isFile()) fs.unlinkSync(full)
+    } catch {}
   }
 }
 
@@ -35,16 +23,14 @@ const handler = async (msg, { conn, args, usedPrefix, command }) => {
   const chatId = msg.key.remoteJid
   const query = args.join(" ").trim()
 
-  cleanTempDirs()
+  cleanTmpDir()
 
   if (!query)
     return conn.sendMessage(chatId, {
       text: `✳️ Usa:\n${usedPrefix}${command} <nombre del video>\nEj:\n${usedPrefix}${command} karma police`
     }, { quoted: msg })
 
-  await conn.sendMessage(chatId, {
-    react: { text: "🎬", key: msg.key }
-  })
+  await conn.sendMessage(chatId, { react: { text: "🎬", key: msg.key } })
 
   try {
     const search = await yts(query)
@@ -71,36 +57,28 @@ const handler = async (msg, { conn, args, usedPrefix, command }) => {
     }
 
     const res = await axios.get(`${API_BASE}/ytdl`, {
-      params: {
-        url: videoLink,
-        type: "Mp4",
-        apikey: API_KEY
-      },
-      headers: {
-        "User-Agent": "Mozilla/5.0",
-        "Accept": "application/json"
-      },
+      params: { url: videoLink, type: "Mp4", apikey: API_KEY },
+      responseType: "arraybuffer",
+      headers: { "User-Agent": "Mozilla/5.0", "Accept": "application/json" },
       timeout: 20000
     })
 
-    if (!res?.data?.status || !res.data.result?.url)
-      throw new Error("La API no devolvió el video")
+    if (!res?.data) throw new Error("La API no devolvió el video")
 
-    const videoUrl = res.data.result.url
+    const videoPath = path.join(tmpDir, `${Date.now()}.mp4`)
+    fs.writeFileSync(videoPath, Buffer.from(res.data))
 
     await conn.sendMessage(chatId, {
-      video: { url: videoUrl },
+      video: fs.readFileSync(videoPath),
       caption,
       mimetype: "video/mp4"
     }, { quoted: msg })
 
-    await conn.sendMessage(chatId, {
-      react: { text: "✅", key: msg.key }
-    })
+    await conn.sendMessage(chatId, { react: { text: "✅", key: msg.key } })
 
-    cleanTempDirs()
+    cleanTmpDir()
   } catch (err) {
-    cleanTempDirs()
+    cleanTmpDir()
     await conn.sendMessage(chatId, {
       text: `❌ Error: ${err?.message || "Fallo interno"}`
     }, { quoted: msg })
