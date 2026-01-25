@@ -1,11 +1,38 @@
 import axios from "axios"
 import yts from "yt-search"
+import fs from "fs"
+import path from "path"
+import os from "os"
 
 const API_BASE = (global.APIs?.may || "").replace(/\/+$/, "")
 const API_KEY  = global.APIKeys?.may || ""
 
-const handler = async (msg, { conn, args, usedPrefix, command }) => {
+function cleanTempDirs() {
+  const dirs = new Set([
+    os.tmpdir(),
+    "/tmp",
+    "/var/tmp",
+    "./tmp",
+    "./media",
+    "./.cache",
+    "./.npm"
+  ])
 
+  for (const dir of dirs) {
+    if (!dir || !fs.existsSync(dir)) continue
+
+    for (const file of fs.readdirSync(dir)) {
+      const full = path.join(dir, file)
+      try {
+        if (fs.statSync(full).isFile()) {
+          fs.unlinkSync(full)
+        }
+      } catch {}
+    }
+  }
+}
+
+const handler = async (msg, { conn, args, usedPrefix, command }) => {
   const chatId = msg.key.remoteJid
   const query = args.join(" ").trim()
 
@@ -19,12 +46,17 @@ const handler = async (msg, { conn, args, usedPrefix, command }) => {
   })
 
   try {
-
     const search = await yts(query)
     if (!search?.videos?.length)
       throw new Error("No se encontraron resultados")
 
     const video = search.videos[0]
+
+    if (video.seconds > 480) {
+      return conn.sendMessage(chatId, {
+        text: "❌ Video demasiado largo (máx 8 minutos)"
+      }, { quoted: msg })
+    }
 
     const title     = video.title
     const author    = video.author?.name || "Desconocido"
@@ -65,7 +97,9 @@ const handler = async (msg, { conn, args, usedPrefix, command }) => {
       react: { text: "✅", key: msg.key }
     })
 
+    cleanTempDirs()
   } catch (err) {
+    cleanTempDirs()
     await conn.sendMessage(chatId, {
       text: `❌ Error: ${err?.message || "Fallo interno"}`
     }, { quoted: msg })
