@@ -1,218 +1,113 @@
-import { smsg } from "./lib/simple.js"
-import { fileURLToPath } from "url"
+import { smsg, decodeJid } from "./lib/simple.js"
 
 const DIGITS = s => String(s || "").replace(/\D/g, "")
-
-function lidParser(participants = []) {
-  try {
-    return participants.map(v => ({
-      id:
-        typeof v?.id === "string" &&
-        v.id.endsWith("@lid") &&
-        v.jid
-          ? v.jid
-          : v.id,
-      admin: v?.admin ?? null,
-      raw: v
-    }))
-  } catch {
-    return participants || []
-  }
-}
 
 const OWNER_NUMBERS = (global.owner || []).map(v =>
   DIGITS(Array.isArray(v) ? v[0] : v)
 )
 
-global.dfail = async (type, m, conn) => {
-  const msg = {
-    rowner: "𝖤𝗌𝗍𝖾 𝖢𝗈𝗆𝖺𝗇𝖽𝗈 𝖲𝗈𝗅𝗈 𝖯𝗎𝖾𝖽𝖾 𝖲𝖾𝗋 𝖴𝗌𝖺𝖽𝗈 𝖯𝗈𝗋 𝖬𝗂 𝖢𝗋𝖾𝖺𝖽𝗈𝗋",
-    owner: "𝖤𝗌𝗍𝖾 𝖢𝗈𝗆𝖺𝗇𝖽𝗈 𝖲𝗈𝗅𝗈 𝖯𝗎𝖾𝖽𝖾 𝖲𝖾𝗋 𝖴𝗍𝗂𝗅𝗂𝗓𝖺𝖽𝗈 𝖯𝗈𝗋 𝖬𝗂 𝖢𝗋𝖾𝖺𝖽𝗈𝗋",
-    mods: "𝖤𝗌𝗍𝖾 𝖢𝗈𝗆𝖺𝗇𝖽𝗈 𝖲𝗈𝗅𝗈 𝖯𝗎𝖾𝖽𝖾 𝖲𝖾𝗋 𝖴𝗌𝖺𝖽𝗈 𝖯𝗈𝗋 𝖽𝖾𝗌𝖺𝗋𝗋𝗈𝗅𝗅𝖺𝖽𝗈𝗋𝖾𝗌",
-    premium: "𝖤𝗌𝗍𝖾 𝖢𝗈𝗆𝖺𝗇𝖽𝗈 𝖲𝗈𝗅𝗈 𝖫𝗈 𝖯𝗎𝖾𝖽𝖾𝗇 𝖴𝗍𝗂𝗅𝗂𝗓𝖺𝗋 𝖴𝗌𝖺𝗋𝗂𝗈𝗌 𝖯𝗋𝖾𝗆𝗂𝗎𝗆",
-    group: "𝖤𝗌𝗍𝖾 𝖢𝗈𝗆𝖺𝗇𝖽𝗈 𝖲𝗈𝗅𝗈 𝖥𝗎𝗇𝖼𝗂𝗈𝗇𝖺 𝖤𝗇 𝖦𝗋𝗎𝗉𝗈𝗌",
-    private: "𝖤𝗌𝗍𝖾 𝖢𝗈𝗆𝖺𝗇𝖽𝗈 𝖲𝗈𝗅𝗈 𝖲𝖾 𝖯𝗎𝖾𝖽𝖾 𝖮𝖼𝗎𝗉𝖺𝗋 𝖤𝗇 𝖤𝗅 𝖯𝗋𝗂𝗏𝖺𝖽𝗈",
-    admin: "𝖤𝗌𝗍𝖾 𝖢𝗈𝗆𝖺𝗇𝖽𝗈 𝖲𝗈𝗅𝗈 𝖯𝗎𝖾𝖽𝖾 𝖲𝖾𝗋 𝖴𝗌𝖺𝖽𝗈 𝖯𝗈𝗋 𝖠𝖽𝗆𝗂𝗇𝗂𝗌𝗍𝗋𝖺𝖽𝗈𝗋𝖾𝗌",
-    botAdmin: "𝖭𝖾𝖼𝗌𝗂𝗍𝗈 𝗌𝖾𝗋 𝖠𝖽𝗆𝗂𝗇",
-    restrict: "𝖤𝗌𝗍𝖾 𝖢𝗈𝗆𝖺𝗇𝖽𝗈 𝖧𝖺 𝖲𝗂𝖽𝗈 𝖣𝖾𝗌𝖺𝖻𝗂𝗅𝗂𝗍𝖺𝖽𝗈"
-  }[type]
-
-  if (!msg) return
-  conn.sendMessage(m.chat, { text: msg }, { quoted: m })
-}
-
 global.groupMetaCache ||= new Map()
-
-setInterval(() => {
-  const now = Date.now()
-  for (const [k, v] of global.groupMetaCache) {
-    if (now - v.ts > 15000) global.groupMetaCache.delete(k)
-  }
-}, 30000)
 
 export function handler(chatUpdate) {
   if (!chatUpdate?.messages) return
-  for (const raw of chatUpdate.messages) handleMessage.call(this, raw)
+  for (const m of chatUpdate.messages)
+    handleMessage.call(this, m)
 }
 
-async function handleMessage(m) {
-  m = smsg(this, m)
+async function handleMessage(raw) {
+  let m = smsg(this, raw)
   if (!m || m.isBaileys || !m.text) return
 
-  const textMsg = m.text
-  const prefixes =
-    global._prefixCache ||
-    (global._prefixCache = Object.freeze(
-      Array.isArray(global.prefixes)
-        ? global.prefixes
-        : [global.prefix || "."]
-    ))
+  const text = m.text
+  const prefixes = Array.isArray(global.prefixes)
+    ? global.prefixes
+    : [global.prefix || "."]
 
-  let usedPrefix = null
+  let usedPrefix = ""
   let command = ""
   let args = []
 
-  const fc = textMsg[0]
-
-  if (prefixes.includes(fc)) {
-    usedPrefix = fc
-    const body = textMsg.slice(1).trim()
+  if (prefixes.includes(text[0])) {
+    usedPrefix = text[0]
+    const body = text.slice(1).trim()
     if (!body) return
     args = body.split(/\s+/)
-    command = (args.shift() || "")
-      .toLowerCase()
-      .replace(/[\u200B-\u200D\uFEFF]/g, "")
-      .trim()
-  } else {
-    command = ""
+    command = args.shift().toLowerCase()
   }
 
   const senderNum = DIGITS(m.sender)
   const isROwner = OWNER_NUMBERS.includes(senderNum)
   const isOwner = isROwner || m.fromMe
 
-  let groupMetadata
-  let participants
-  let isAdmin = false
-  let isBotAdmin = !m.isGroup
+  let meta, isAdmin = false, isBotAdmin = !m.isGroup
 
-  const loadGroupData = async () => {
-    if (!m.isGroup) return
-    let cached = global.groupMetaCache.get(m.chat)
-
+  if (m.isGroup) {
+    const cached = global.groupMetaCache.get(m.chat)
     if (!cached || Date.now() - cached.ts > 15000) {
-      const meta = await this.groupMetadata(m.chat)
-      const raw = meta.participants || []
-      const norm = lidParser(raw)
-      const adminNums = new Set()
-
-      for (let i = 0; i < raw.length; i++) {
-        const r = raw[i]
-        const n = norm[i]
-        const adm =
-          r?.admin === "admin" ||
-          r?.admin === "superadmin" ||
-          n?.admin === "admin" ||
-          n?.admin === "superadmin"
-
-        if (!adm) continue
-        ;[r?.id, r?.jid, n?.id].forEach(x => {
-          const d = DIGITS(x)
-          if (d) adminNums.add(d)
-        })
-      }
-
-      cached = { ts: Date.now(), meta, adminNums }
-      global.groupMetaCache.set(m.chat, cached)
+      meta = await this.groupMetadata(m.chat)
+      const admins = new Set(
+        meta.participants
+          .filter(p => p.admin)
+          .flatMap(p => [p.id, p.jid])
+          .map(DIGITS)
+          .filter(Boolean)
+      )
+      global.groupMetaCache.set(m.chat, {
+        ts: Date.now(),
+        meta,
+        admins
+      })
     }
 
-    groupMetadata = cached.meta
-    participants = groupMetadata.participants || []
-    isAdmin = cached.adminNums.has(senderNum)
-    isBotAdmin = cached.adminNums.has(DIGITS(this.user.jid))
+    const data = global.groupMetaCache.get(m.chat)
+    meta = data.meta
+    isAdmin = data.admins.has(senderNum)
+
+    const botJid = decodeJid(this.user.id)
+    isBotAdmin = data.admins.has(DIGITS(botJid))
   }
 
   for (const plugin of Object.values(global.plugins)) {
     if (!plugin || plugin.disabled) continue
 
-    let accept = false
+    const match =
+      plugin.customPrefix instanceof RegExp
+        ? plugin.customPrefix.test(text)
+        : plugin.command instanceof RegExp
+        ? plugin.command.test(command)
+        : Array.isArray(plugin.command)
+        ? plugin.command.includes(command)
+        : plugin.command === command
 
-    if (plugin.customPrefix instanceof RegExp)
-      accept = plugin.customPrefix.test(textMsg)
-    else if (plugin.command)
-      accept =
-        plugin.command instanceof RegExp
-          ? plugin.command.test(command)
-          : Array.isArray(plugin.command)
-          ? plugin.command.includes(command)
-          : plugin.command === command
+    if (!match) continue
 
-    if (!accept) continue
+    if (plugin.group && !m.isGroup)
+      return m.reply("❌ Solo funciona en grupos")
 
-    if (plugin.group && !m.isGroup) {
-      global.dfail("group", m, this)
-      continue
-    }
+    if (plugin.rowner && !isROwner)
+      return m.reply("❌ Solo el owner")
 
-    if (m.isGroup && (plugin.admin || plugin.botAdmin)) {
-      if (!groupMetadata) await loadGroupData()
-    }
+    if (plugin.owner && !isOwner)
+      return m.reply("❌ Solo owner")
 
-    participants = m.isGroup ? participants : []
+    if (plugin.admin && !isAdmin)
+      return m.reply("❌ Solo admins")
 
-    if (plugin.rowner && !isROwner) {
-      global.dfail("rowner", m, this)
-      continue
-    }
+    if (plugin.botAdmin && !isBotAdmin)
+      return m.reply("❌ Necesito ser admin")
 
-    if (plugin.owner && !isOwner) {
-      global.dfail("owner", m, this)
-      continue
-    }
+    const exec = plugin.default || plugin
+    if (typeof exec !== "function") return
 
-    if (plugin.botAdmin && !isBotAdmin) {
-      global.dfail("botAdmin", m, this)
-      continue
-    }
-
-    if (plugin.admin && !isAdmin) {
-      global.dfail("admin", m, this)
-      continue
-    }
-
-    const exec =
-      typeof plugin === "function"
-        ? plugin
-        : typeof plugin.default === "function"
-        ? plugin.default
-        : null
-
-    if (!exec) continue
-
-    setImmediate(() =>
-      exec.call(this, m, {
-        conn: this,
-        args,
-        usedPrefix,
-        command,
-        participants,
-        groupMetadata,
-        isROwner,
-        isOwner,
-        isAdmin,
-        isBotAdmin,
-        chat: m.chat
-      })
-    )
-
-    return
+    return exec.call(this, m, {
+      conn: this,
+      args,
+      usedPrefix,
+      command,
+      groupMetadata: meta,
+      isOwner,
+      isAdmin,
+      isBotAdmin
+    })
   }
-}
-
-if (process.env.NODE_ENV === "development") {
-  const file = fileURLToPath(import.meta.url)
-  fs.watchFile(file, () => {
-    fs.unwatchFile(file)
-    console.log("handler.js actualizado")
-  })
 }
