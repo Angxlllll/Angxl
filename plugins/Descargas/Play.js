@@ -5,7 +5,12 @@ const handler = async (m, { conn, args }) => {
   const query = args.join(" ").trim()
   if (!query) return m.reply("🎶 Ingresa el nombre del video de YouTube.")
 
-  await m.react("🕘")
+  await conn.sendMessage(m.chat, {
+  react: {
+    text: "🕘",
+    key: m.key
+  }
+})
 
   try {
     let url = query
@@ -47,11 +52,9 @@ const handler = async (m, { conn, args }) => {
 
     await downloadMp3(conn, m, url)
 
-    await m.react("✅")
   } catch (e) {
     console.error(e)
     await m.reply("❌ Error al procesar el audio.")
-    await m.react("⚠️")
   }
 }
 
