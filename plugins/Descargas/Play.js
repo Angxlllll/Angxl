@@ -2,7 +2,7 @@ import yts from "yt-search"
 import axios from "axios"
 
 const API_URL = "https://api-adonix.ultraplus.click/download/ytaudio"
-const API_KEY = "Angxlllll"
+const API_KEY = "SHADOWBOTKEYMD"
 
 const handler = async (m, { conn, args }) => {
   const query = args.join(" ").trim()
@@ -80,6 +80,5 @@ const formatViews = v => {
 
 handler.command = ["play", "yt", "mp3"]
 handler.tags = ["descargas"]
-handler.register = true
 
 export default handler
