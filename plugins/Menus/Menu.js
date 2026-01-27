@@ -10,7 +10,7 @@ const imageCache = new Map()
 
 let handler = async (m, { conn }) => {
 
-  conn.sendMessage(m.chat, { react: { text: "🔥", key: m.key } }).catch(() => {})
+  conn.sendMessage(m.chat, { react: { text: "📜", key: m.key } }).catch(() => {})
 
   async function createImage(url) {
     if (imageCache.has(url)) return imageCache.get(url)
