@@ -1,3 +1,10 @@
+import {
+  generateWAMessageContent,
+  generateWAMessageFromContent,
+  proto
+} from "@whiskeysockets/baileys"
+import fetch from 'node-fetch'
+
 const handler = async (m, { conn }) => {
   const chat = m.chat
 
@@ -22,12 +29,10 @@ const handler = async (m, { conn }) => {
     const meta = await conn.groupMetadata(chat)
     const groupName = meta.subject || "Grupo"
 
-    let inviteCode
+    let inviteCode = null
     try {
       inviteCode = await conn.groupInviteCode(chat)
-    } catch {
-      return
-    }
+    } catch {}
 
     if (!inviteCode) return
 
@@ -45,14 +50,54 @@ const handler = async (m, { conn }) => {
       ppBuffer = await safeFetch(fallbackPP)
     }
 
-    await conn.sendMessage(
+    const buttons = [
+      {
+        name: "cta_copy",
+        buttonParamsJson: JSON.stringify({
+          display_text: "𝗖𝗼𝗽𝗶𝗮𝗿 𝗘𝗻𝗹𝗮𝗰𝗲",
+          copy_code: link
+        })
+      }
+    ]
+
+    const { imageMessage } = await generateWAMessageContent(
+      { image: ppBuffer },
+      { upload: conn.waUploadToServer }
+    )
+
+    const interactive = generateWAMessageFromContent(
       chat,
       {
-        image: ppBuffer,
-        caption: `🔗 *Enlace del grupo*\n\n*${groupName}*\n${link}`
+        viewOnceMessage: {
+          message: {
+            messageContextInfo: {
+              deviceListMetadata: {},
+              deviceListMetadataVersion: 2
+            },
+            interactiveMessage: proto.Message.InteractiveMessage.fromObject({
+              header: proto.Message.InteractiveMessage.Header.fromObject({
+                title: `_*${groupName}*_`,
+                hasMediaAttachment: true,
+                imageMessage
+              }),
+              body: proto.Message.InteractiveMessage.Body.create({
+                text: `${link}`
+              }),
+              nativeFlowMessage:
+                proto.Message.InteractiveMessage.NativeFlowMessage.fromObject({
+                  buttons,
+                  messageParamsJson: ""
+                })
+            })
+          }
+        }
       },
       { quoted: m }
     )
+
+    await conn.relayMessage(chat, interactive.message, {
+      messageId: interactive.key.id
+    })
   } catch (err) {
     console.error("⚠️ Error en comando .link:", err)
   }
@@ -63,4 +108,5 @@ handler.tags = ["𝖦𝖱𝖴𝖯𝖮𝖲"]
 handler.customPrefix = /^\.?(link)$/i
 handler.command = new RegExp()
 handler.group = true
+
 export default handler
