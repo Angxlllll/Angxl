@@ -34,8 +34,8 @@ let handler = async (m, { conn }) => {
       ]
     },
     {
-      name: '𝖠𝗇𝗀𝖾𝗅.𝖿𝗀𝗓',
-      desc: '𝖴𝗇𝗈 𝖣𝖾 𝖫𝗈𝗌 𝖨𝗇𝗏𝖾𝗋𝗌𝗂𝗈𝗇𝗂𝗌𝗍𝖺𝗌 𝖯𝗋𝗂𝗇𝖼𝗂𝗉𝖺𝗅𝖾𝗌 🗣️',
+      name: '_*𝖬𝖤𝖭𝖴 𝖣𝖤𝖲𝖢𝖠𝖱𝖦𝖠𝖲*_\n',
+      desc: '⭒ ִֶָ७ ꯭🎵˙⋆｡ - *𝖯𝗅𝖺𝗒*\n⭒ ִֶָ७ ꯭🎵˙⋆｡ - *𝖯𝗅𝖺𝗒2*\n⭒ ִֶָ७ ꯭🎵˙⋆｡ - *𝖸𝗍𝗆𝗉3*\n⭒ ִֶָ७ ꯭🎵˙⋆｡ - *𝖸𝗍𝗆𝗉4*',
       image: 'https://files.catbox.moe/63tppq.jpg',
       buttons: [
         { name: 'WhatsApp', url: 'https://wa.me/5215584393251' }
