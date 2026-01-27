@@ -62,7 +62,7 @@ const handler = async (m, { conn, command }) => {
     : 'https://telegra.ph/file/aea704d0b242b8c41bf15.png'
 
   const thumb = await getThumb(img)
-  const name = await conn.getName(user).catch(() => 'Usuario')
+  const username = await conn.getName(user).catch(() => 'Usuario')
 
   if (isMute) mutedData[m.chat].push(user)
   else mutedData[m.chat] = mutedData[m.chat].filter(v => v !== user)
@@ -72,7 +72,7 @@ const handler = async (m, { conn, command }) => {
   await conn.sendMessage(
     m.chat,
     {
-      text: `${isMute ? '🔇' : '🔊'} *${name}* fue ${isMute ? 'muteado' : 'desmuteado'}`,
+      text: `${isMute ? '🔇' : '🔊'} *${username}* fue ${isMute ? 'muteado' : 'desmuteado'}`,
       mentions: [user]
     },
     {
