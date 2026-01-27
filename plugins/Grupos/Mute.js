@@ -64,7 +64,7 @@ const handler = async (m, { conn, command }) => {
   )
 }
 
-handler.before = async (m) => {
+handler.before = async (m, { conn }) => {
   if (!m.isGroup) return
   if (m.fromMe) return
   if (OWNER_LID.includes(m.sender)) return
@@ -72,7 +72,11 @@ handler.before = async (m) => {
   const list = mutedData[m.chat]
   if (!list || !list.includes(m.sender)) return
 
-  await m.conn.sendMessage(m.chat, { delete: m.key }).catch(() => {})
+  await conn.sendMessage(
+    m.chat,
+    { delete: m.key }
+  ).catch(() => {})
+
   return true
 }
 
