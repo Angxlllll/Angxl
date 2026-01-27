@@ -50,14 +50,14 @@ const handler = async (m, { conn }) => {
     }
 
     const buttons = [
-      {
-        name: "cta_copy",
-        buttonParamsJson: JSON.stringify({
-          display_text: "𝗖𝗼𝗽𝗶𝗮𝗿 𝗘𝗻𝗹𝗮𝗰𝗲",
-          copy_code: link
-        })
-      }
-    ]
+  {
+    name: "cta_url",
+    buttonParamsJson: JSON.stringify({
+      display_text: "𝗔𝗯𝗿𝗶𝗿 𝗘𝗻𝗹𝗮𝗰𝗲",
+      url: link
+    })
+  }
+]
 
     const { imageMessage } = await generateWAMessageContent(
       { image: ppBuffer },
