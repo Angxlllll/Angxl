@@ -26,7 +26,7 @@ let handler = async (m, { conn }) => {
 
   const owners = [
     {
-      name: '',
+      name: '*𝖦𝖱𝖴𝖯𝖮𝖲\n',
       desc: '⭒ ִֶָ७ ꯭📜˙⋆｡ - *𝖣𝖾𝗆𝗈𝗍𝖾*\n⭒ ִֶָ७ ꯭📜˙⋆｡ - *𝖣𝖾𝗅𝖾𝗍𝖾*',
       image: 'https://cdn.russellxz.click/b1af0aef.jpeg',
       buttons: [
@@ -57,7 +57,7 @@ let handler = async (m, { conn }) => {
 
       return {
         body: proto.Message.InteractiveMessage.Body.fromObject({
-          text: `*${owner.name}*\n${owner.desc}`
+          text: `${owner.name}\n${owner.desc}`
         }),
         header: proto.Message.InteractiveMessage.Header.fromObject({
           hasMediaAttachment: true,
