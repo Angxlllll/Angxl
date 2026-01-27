@@ -13,7 +13,7 @@ const handler = async (m, { conn, args }) => {
   })
 
   try {
-    const search = await yts(query, { limit: 1 })
+    const search = await yts(query)
     const video = search?.videos?.[0]
     if (!video) throw 0
 
@@ -45,12 +45,17 @@ const handler = async (m, { conn, args }) => {
       timeout: 20000
     })
 
-    if (!data?.status || !data?.data?.url) throw 0
+    const audioUrl =
+      data?.data?.url ||
+      data?.datos?.url ||
+      null
+
+    if (!audioUrl || !/^https?:\/\//i.test(audioUrl)) throw 0
 
     await conn.sendMessage(
       m.chat,
       {
-        audio: { url: data.data.url },
+        audio: { url: audioUrl },
         mimetype: "audio/mpeg",
         fileName: cleanName(video.title) + ".mp3",
         ptt: false
@@ -80,5 +85,6 @@ const formatViews = v => {
 
 handler.command = ["play", "yt", "mp3"]
 handler.tags = ["descargas"]
+handler.register = true
 
 export default handler
