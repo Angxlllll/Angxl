@@ -6,81 +6,71 @@ const {
   proto
 } = baileys
 
-const imageCache = new Map()
+global.__OWNER_CACHE__ ||= {
+  images: new Map(),
+  slide: null
+}
 
-let handler = async (m, { conn }) => {
-
-  conn.sendMessage(m.chat, { react: { text: "🔥", key: m.key } }).catch(() => {})
-
-  async function createImage(url) {
-    if (imageCache.has(url)) return imageCache.get(url)
-
-    const { imageMessage } = await generateWAMessageContent(
-      { image: { url } },
-      { upload: conn.waUploadToServer }
-    )
-
-    imageCache.set(url, imageMessage)
-    return imageMessage
+const OWNERS = [
+  {
+    name: '𝖠𝗇𝗀𝖾𝗅.𝗑𝗒𝗓',
+    desc: '𝖢𝗋𝖾𝖺𝖽𝗈𝗋 𝗒 𝖣𝖾𝗌𝖺𝗋𝗋𝗈𝗅𝗅𝖺𝖽𝗈𝗋 𝖯𝗋𝗂𝗇𝖼𝗂𝗉𝖺𝗅 𝖣𝖾 𝖠𝗇𝗀𝖾𝗅 𝖡𝗈𝗍 👑',
+    image: 'https://cdn.russellxz.click/b1af0aef.jpeg',
+    buttons: [{ name: 'WhatsApp', url: 'https://wa.me/5215911153853' }]
+  },
+  {
+    name: '𝖠𝗇𝗀𝖾𝗅.𝖿𝗀𝗓',
+    desc: '𝖴𝗇𝗈 𝖣𝖾 𝖫𝗈𝗌 𝖨𝗇𝗏𝖾𝗋𝗌𝗂𝗈𝗇𝗂𝗌𝗍𝖺𝗌 𝖯𝗋𝗂𝗇𝖼𝗂𝗉𝖺𝗅𝖾𝗌 🗣️',
+    image: 'https://cdn.russellxz.click/295d5247.jpeg',
+    buttons: [{ name: 'WhatsApp', url: 'https://wa.me/5215584393251' }]
   }
+]
 
-  const owners = [
-    {
-      name: '𝖠𝗇𝗀𝖾𝗅.𝗑𝗒𝗓',
-      desc: '𝖢𝗋𝖾𝖺𝖽𝗈𝗋 𝗒 𝖣𝖾𝗌𝖺𝗋𝗋𝗈𝗅𝗅𝖺𝖽𝗈𝗋 𝖯𝗋𝗂𝗇𝖼𝗂𝗉𝖺𝗅 𝖣𝖾 𝖠𝗇𝗀𝖾𝗅 𝖡𝗈𝗍 👑',
-      image: 'https://cdn.russellxz.click/b1af0aef.jpeg',
-      buttons: [
-        { name: 'WhatsApp', url: 'https://wa.me/5215911153853' }
-      ]
-    },
-    {
-      name: '𝖠𝗇𝗀𝖾𝗅.𝖿𝗀𝗓',
-      desc: '𝖴𝗇𝗈 𝖣𝖾 𝖫𝗈𝗌 𝖨𝗇𝗏𝖾𝗋𝗌𝗂𝗈𝗇𝗂𝗌𝗍𝖺𝗌 𝖯𝗋𝗂𝗇𝖼𝗂𝗉𝖺𝗅𝖾𝗌 🗣️',
-      image: 'https://cdn.russellxz.click/295d5247.jpeg',
-      buttons: [
-        { name: 'WhatsApp', url: 'https://wa.me/5215584393251' }
-      ]
-    },
-    {
-      name: '𝖠𝗇𝗀𝖾𝗅.𝗌𝗍𝖺𝖿𝖿',
-      desc: '𝖬𝗂𝖾𝗆𝖻𝗋𝗈 𝖮𝖿𝗂𝖼𝗂𝖺𝗅 𝖣𝖾𝗅 𝖤𝗊𝗎𝗂𝗉𝗈 𝖠𝗇𝗀𝖾𝗅 𝖡𝗈𝗍 ⚙️',
-      image: 'https://files.catbox.moe/piu53i.jpg',
-      buttons: [
-        { name: 'WhatsApp', url: 'https://wa.me/5212213479743' }
-      ]
-    }
-  ]
+async function getImage(conn, url) {
+  if (global.__OWNER_CACHE__.images.has(url))
+    return global.__OWNER_CACHE__.images.get(url)
+
+  const { imageMessage } = await generateWAMessageContent(
+    { image: { url } },
+    { upload: conn.waUploadToServer }
+  )
+
+  global.__OWNER_CACHE__.images.set(url, imageMessage)
+  return imageMessage
+}
+
+async function buildSlide(conn, chat) {
+  if (global.__OWNER_CACHE__.slide)
+    return global.__OWNER_CACHE__.slide
 
   const cards = await Promise.all(
-    owners.map(async owner => {
-      const imageMsg = await createImage(owner.image)
-
-      const formattedButtons = owner.buttons.map(btn => ({
-        name: 'cta_url',
-        buttonParamsJson: JSON.stringify({
-          display_text: btn.name,
-          url: btn.url
-        })
-      }))
+    OWNERS.map(async o => {
+      const img = await getImage(conn, o.image)
 
       return {
         body: proto.Message.InteractiveMessage.Body.fromObject({
-          text: `*${owner.name}*\n${owner.desc}`
+          text: `*${o.name}*\n${o.desc}`
         }),
         header: proto.Message.InteractiveMessage.Header.fromObject({
           hasMediaAttachment: true,
-          imageMessage: imageMsg
+          imageMessage: img
         }),
         nativeFlowMessage:
           proto.Message.InteractiveMessage.NativeFlowMessage.fromObject({
-            buttons: formattedButtons
+            buttons: o.buttons.map(b => ({
+              name: 'cta_url',
+              buttonParamsJson: JSON.stringify({
+                display_text: b.name,
+                url: b.url
+              })
+            }))
           })
       }
     })
   )
 
-  const slideMessage = generateWAMessageFromContent(
-    m.chat,
+  const msg = generateWAMessageFromContent(
+    chat,
     {
       viewOnceMessage: {
         message: {
@@ -101,19 +91,25 @@ let handler = async (m, { conn }) => {
     {}
   )
 
-  await conn.relayMessage(
-    m.chat,
-    slideMessage.message,
-    { messageId: slideMessage.key.id }
-  )
+  global.__OWNER_CACHE__.slide = msg
+  return msg
+}
+
+let handler = async (m, { conn }) => {
+  conn.sendMessage(m.chat, { react: { text: '🔥', key: m.key } }).catch(() => {})
+
+  const slide = await buildSlide(conn, m.chat)
+  await conn.relayMessage(m.chat, slide.message, {
+    messageId: slide.key.id
+  })
 }
 
 handler.command = handler.help = [
-  'donar',
   'owner',
-  'cuentasoficiales',
   'creador',
-  'cuentas'
+  'donar',
+  'cuentas',
+  'cuentasoficiales'
 ]
 
 export default handler
