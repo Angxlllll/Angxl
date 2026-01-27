@@ -6,22 +6,28 @@ const {
   proto
 } = baileys
 
+const imageCache = new Map()
+
 let handler = async (m, { conn }) => {
 
-  await conn.sendMessage(m.chat, { react: { text: "🔥", key: m.key } })
+  conn.sendMessage(m.chat, { react: { text: "🔥", key: m.key } }).catch(() => {})
 
   async function createImage(url) {
+    if (imageCache.has(url)) return imageCache.get(url)
+
     const { imageMessage } = await generateWAMessageContent(
       { image: { url } },
       { upload: conn.waUploadToServer }
     )
+
+    imageCache.set(url, imageMessage)
     return imageMessage
   }
 
   const owners = [
     {
       name: '𝖠𝗇𝗀𝖾𝗅.𝗑𝗒𝗓',
-      desc: `𝖢𝗋𝖾𝖺𝖽𝗈𝗋 𝗒 𝖣𝖾𝗌𝖺𝗋𝗋𝗈𝗅𝗅𝖺𝖽𝗈𝗋 𝖯𝗋𝗂𝗇𝖼𝗂𝗉𝖺𝗅 𝖣𝖾 𝖠𝗇𝗀𝖾𝗅 𝖡𝗈𝗍 👑`,
+      desc: '𝖢𝗋𝖾𝖺𝖽𝗈𝗋 𝗒 𝖣𝖾𝗌𝖺𝗋𝗋𝗈𝗅𝗅𝖺𝖽𝗈𝗋 𝖯𝗋𝗂𝗇𝖼𝗂𝗉𝖺𝗅 𝖣𝖾 𝖠𝗇𝗀𝖾𝗅 𝖡𝗈𝗍 👑',
       image: 'https://cdn.russellxz.click/b1af0aef.jpeg',
       buttons: [
         { name: 'WhatsApp', url: 'https://wa.me/5215911153853' }
@@ -30,9 +36,9 @@ let handler = async (m, { conn }) => {
     {
       name: '𝖠𝗇𝗀𝖾𝗅.𝖿𝗀𝗓',
       desc: '𝖴𝗇𝗈 𝖣𝖾 𝖫𝗈𝗌 𝖨𝗇𝗏𝖾𝗋𝗌𝗂𝗈𝗇𝗂𝗌𝗍𝖺𝗌 𝖯𝗋𝗂𝗇𝖼𝗂𝗉𝖺𝗅𝖾𝗌 🗣️',
-      image: 'https://files.catbox.moe/tkf6cn.jpg',
+      image: 'https://cdn.russellxz.click/295d5247.jpeg',
       buttons: [
-        { name: 'WhatsApp', url: 'https://wa.me/5215542690330' }
+        { name: 'WhatsApp', url: 'https://wa.me/5215584393251' }
       ]
     },
     {
@@ -45,31 +51,33 @@ let handler = async (m, { conn }) => {
     }
   ]
 
-  let cards = []
-  for (let owner of owners) {
-    const imageMsg = await createImage(owner.image)
+  const cards = await Promise.all(
+    owners.map(async owner => {
+      const imageMsg = await createImage(owner.image)
 
-    let formattedButtons = owner.buttons.map(btn => ({
-      name: 'cta_url',
-      buttonParamsJson: JSON.stringify({
-        display_text: btn.name,
-        url: btn.url
-      })
-    }))
+      const formattedButtons = owner.buttons.map(btn => ({
+        name: 'cta_url',
+        buttonParamsJson: JSON.stringify({
+          display_text: btn.name,
+          url: btn.url
+        })
+      }))
 
-    cards.push({
-      body: proto.Message.InteractiveMessage.Body.fromObject({
-        text: `*${owner.name}*\n${owner.desc}`
-      }),
-      header: proto.Message.InteractiveMessage.Header.fromObject({
-        hasMediaAttachment: true,
-        imageMessage: imageMsg
-      }),
-      nativeFlowMessage: proto.Message.InteractiveMessage.NativeFlowMessage.fromObject({
-        buttons: formattedButtons
-      })
+      return {
+        body: proto.Message.InteractiveMessage.Body.fromObject({
+          text: `*${owner.name}*\n${owner.desc}`
+        }),
+        header: proto.Message.InteractiveMessage.Header.fromObject({
+          hasMediaAttachment: true,
+          imageMessage: imageMsg
+        }),
+        nativeFlowMessage:
+          proto.Message.InteractiveMessage.NativeFlowMessage.fromObject({
+            buttons: formattedButtons
+          })
+      }
     })
-  }
+  )
 
   const slideMessage = generateWAMessageFromContent(
     m.chat,
@@ -80,20 +88,32 @@ let handler = async (m, { conn }) => {
             deviceListMetadata: {},
             deviceListMetadataVersion: 2
           },
-          interactiveMessage: proto.Message.InteractiveMessage.fromObject({
-            carouselMessage: proto.Message.InteractiveMessage.CarouselMessage.fromObject({
-              cards
+          interactiveMessage:
+            proto.Message.InteractiveMessage.fromObject({
+              carouselMessage:
+                proto.Message.InteractiveMessage.CarouselMessage.fromObject({
+                  cards
+                })
             })
-          })
         }
       }
     },
     {}
   )
 
-  await conn.relayMessage(m.chat, slideMessage.message, { messageId: slideMessage.key.id })
+  await conn.relayMessage(
+    m.chat,
+    slideMessage.message,
+    { messageId: slideMessage.key.id }
+  )
 }
 
-handler.command = handler.help = ['donar', 'owner', 'cuentasoficiales', 'creador', 'cuentas']
+handler.command = handler.help = [
+  'donar',
+  'owner',
+  'cuentasoficiales',
+  'creador',
+  'cuentas'
+]
 
 export default handler
