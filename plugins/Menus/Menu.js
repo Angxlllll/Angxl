@@ -37,7 +37,7 @@ let handler = async (m, { conn }) => {
   {
     name: '_*𝖬𝖤𝖭𝖴 𝖢𝖮𝖬𝖠𝖭𝖣𝖮𝖲 𝖲𝖨𝖭 𝖯𝖱𝖤𝖥𝖨𝖷*_\n',
     desc: '⭒ ִֶָ७ ꯭🔳˙⋆｡ - *𝖣𝖾𝗆𝗈𝗍𝖾*\n⭒ ִֶָ७ ꯭🔳˙⋆｡ - *𝖣𝖾𝗅𝖾𝗍𝖾*\n⭒ ִֶָ७ ꯭🔳˙⋆｡ - *𝖢𝖾𝗋𝗋𝖺𝗋*\n⭒ ִֶָ७ ꯭🔳˙⋆｡ - *𝖠𝖻𝗋𝗂𝗋*\n⭒ ִֶָ७ ꯭🔳˙⋆｡ - *𝖪𝗂𝖼𝗄*\n⭒ ִֶָ७ ꯭🔳˙⋆｡ - *𝖫𝗂𝗇𝗄*',
-    image: 'https://files.catbox.moe/9x4n6h.jpg',
+    image: 'https://files.catbox.moe/p0fnvg.jpg',
     buttons: [
       { name: 'Soporte', url: 'https://wa.me/5210000000000' }
     ]
