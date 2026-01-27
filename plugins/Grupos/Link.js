@@ -3,7 +3,6 @@ import {
   generateWAMessageFromContent,
   proto
 } from "@whiskeysockets/baileys"
-import fetch from 'node-fetch'
 
 const handler = async (m, { conn }) => {
   const chat = m.chat
