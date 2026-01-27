@@ -1,87 +1,119 @@
-import axios from "axios"
 import yts from "yt-search"
+import axios from "axios"
 
-const SYLPHY_API = "https://sylphy.xyz/download/v2/ytmp3"
-const API_KEY = "sylphy-c4e327"
+const handler = async (m, { conn, text }) => {
+  if (!text) return m.reply("🎶 Ingresa el nombre del video de YouTube.")
 
-const handler = async (msg, { conn, args, usedPrefix, command }) => {
-  const chatId = msg.key.remoteJid
-  const query = args.join(" ").trim()
-
-  if (!query) {
-    return conn.sendMessage(chatId, {
-      text: `✳️ Usa:\n${usedPrefix}${command} <canción>\nEj:\n${usedPrefix}${command} Karma Police`
-    }, { quoted: msg })
-  }
-
-  await conn.sendMessage(chatId, {
-    react: { text: "🕓", key: msg.key }
-  })
+  await m.react("🕘")
 
   try {
-    const search = await yts(query)
-    if (!search?.videos?.length) throw "Sin resultados"
+    let url = text
+    let title = "Desconocido"
+    let authorName = "Desconocido"
+    let durationTimestamp = "Desconocida"
+    let views = "No disponible"
+    let thumbnail = ""
 
-    const video = search.videos[0]
-    const title = video.title
-    const author = video.author?.name || "Desconocido"
-    const duration = video.timestamp || "—"
-    const thumb = video.thumbnail
-    const videoUrl = video.url
-
-    const caption = `
-⭒ ִֶָ७ ꯭🎵˙⋆｡ - *Título:* ${title}
-⭒ ִֶָ७ ꯭🎤˙⋆｡ - *Artista:* ${author}
-⭒ ִֶָ७ ꯭🕑˙⋆｡ - *Duración:* ${duration}
-`.trim()
-
-    await conn.sendMessage(chatId, {
-      image: { url: thumb },
-      caption
-    }, { quoted: msg })
-
-    const res = await axios.get(SYLPHY_API, {
-      params: {
-        url: videoUrl,
-        api_key: API_KEY
-      },
-      headers: {
-        "User-Agent": "Mozilla/5.0",
-        "Accept": "application/json"
-      },
-      timeout: 20000
-    })
-
-    if (
-      !res?.data?.status ||
-      !res.data.result?.dl_url ||
-      !/^https?:\/\//i.test(res.data.result.dl_url)
-    ) {
-      throw "La API no devolvió link válido"
+    if (!text.startsWith("http")) {
+      const res = await yts(text)
+      if (!res?.videos?.length) return m.reply("🚫 No encontré resultados.")
+      const video = res.videos[0]
+      title = video.title
+      authorName = video.author?.name || "Desconocido"
+      durationTimestamp = video.timestamp || "?"
+      views = video.views || "?"
+      url = video.url
+      thumbnail = video.thumbnail
     }
 
-    const audioUrl = res.data.result.dl_url
+    const vistas = formatViews(views)
 
-    await conn.sendMessage(chatId, {
-      audio: { url: audioUrl },
-      mimetype: "audio/mpeg",
-      fileName: `${title}.mp3`,
-      ptt: false
-    }, { quoted: msg })
+    const img = thumbnail
+      ? (await axios.get(thumbnail, { responseType: "arraybuffer" })).data
+      : null
 
-    await conn.sendMessage(chatId, {
-      react: { text: "✅", key: msg.key }
-    })
+    const caption = `
+✧━───『 𝙄𝙣𝙛𝙤 𝙙𝙚𝙡 𝙑𝙞𝙙𝙚𝙤 』───━✧
 
+🎼 Título: ${title}
+📺 Canal: ${authorName}
+👁️ Vistas: ${vistas}
+⏳ Duración: ${durationTimestamp}
+🌐 Enlace: ${url}
+
+⚡ Shadow Bot ⚡
+`
+
+    if (img) {
+      await conn.sendMessage(
+        m.chat,
+        { image: img, caption },
+        { quoted: m }
+      )
+    } else {
+      await m.reply(caption)
+    }
+
+    await downloadMp3(conn, m, url)
+
+    await m.react("✅")
   } catch (e) {
-    await conn.sendMessage(chatId, {
-      text: "❌ Error al procesar la canción."
-    }, { quoted: msg })
+    await m.reply("❌ Error: " + e.message)
+    await m.react("⚠️")
   }
 }
 
-handler.command = ["play"]
-handler.help = ["𝖯𝗅𝖺𝗒 <𝖳𝖾𝗑𝗍𝗈>"]
-handler.tags = ["𝖣𝖤𝖲𝖢𝖠𝖱𝖦𝖠𝖲"]
+const downloadMp3 = async (conn, m, url) => {
+  const sent = await conn.sendMessage(
+    m.chat,
+    { text: "🎵 Descargando audio..." },
+    { quoted: m }
+  )
+
+  const apiUrl = `https://api-adonix.ultraplus.click/download/ytaudio?url=${encodeURIComponent(url)}&apikey=SHADOWBOTKEYMD`
+
+  const { data } = await axios.get(apiUrl)
+
+  if (!data?.status || !data?.data?.url) {
+    return conn.sendMessage(
+      m.chat,
+      { text: "🚫 No se pudo descargar el audio.", edit: sent.key }
+    )
+  }
+
+  const fileUrl = data.data.url
+  const fileTitle = cleanName(data.data.title || "audio")
+
+  await conn.sendMessage(
+    m.chat,
+    {
+      audio: { url: fileUrl },
+      mimetype: "audio/mpeg",
+      fileName: fileTitle + ".mp3",
+      ptt: true
+    },
+    { quoted: m }
+  )
+
+  await conn.sendMessage(
+    m.chat,
+    { text: "✅ Audio enviado", edit: sent.key }
+  )
+}
+
+const cleanName = (name) =>
+  name.replace(/[^\w\s.-]/gi, "").substring(0, 60)
+
+const formatViews = (views) => {
+  if (typeof views !== "number") return views
+  if (views >= 1e9) return (views / 1e9).toFixed(1) + "B"
+  if (views >= 1e6) return (views / 1e6).toFixed(1) + "M"
+  if (views >= 1e3) return (views / 1e3).toFixed(1) + "K"
+  return views.toString()
+}
+
+handler.command = ["play", "yt", "mp3"]
+handler.tags = ["descargas"]
+handler.register = true
 
 export default handler
