@@ -1,90 +1,126 @@
-import yts from "yt-search"
-import axios from "axios"
+import axios from 'axios'
+import fetch from 'node-fetch'
+import yts from 'yt-search'
 
-const API_URL = "https://api-adonix.ultraplus.click/download/ytaudio"
-const API_KEY = "Angxlllll"
+const cooldowns = new Map()
+const COOLDOWN_TIME = 30 * 1000
 
-const handler = async (m, { conn, args }) => {
-  const query = args.join(" ").trim()
-  if (!query) return m.reply("🎶 Ingresa el nombre del video de YouTube.")
-
-  await conn.sendMessage(m.chat, {
-    react: { text: "🕘", key: m.key }
-  })
-
+async function downloadYoutubeAudio(videoUrl) {
   try {
-    const search = await yts(query)
-    const video = search?.videos?.[0]
-    if (!video) throw 0
+    const cfApiUrl = 'https://api.nekolabs.web.id/tools/bypass/cf-turnstile'
+    const cfPayload = {
+      url: 'https://ezconv.cc',
+      siteKey: '0x4AAAAAAAi2NuZzwS99-7op'
+    }
 
-    await conn.sendMessage(
-      m.chat,
-      {
-        image: { url: video.thumbnail },
-        caption: `
-✧━───『 𝙄𝙣𝙛𝙤 𝙙𝙚𝙡 𝙑𝙞𝙙𝙚𝙤 』───━✧
+    const { data: cfResponse } = await axios.post(cfApiUrl, cfPayload)
 
-🎼 Título: ${video.title}
-📺 Canal: ${video.author?.name || "—"}
-👁️ Vistas: ${formatViews(video.views)}
-⏳ Duración: ${video.timestamp || "—"}
-`.trim()
-      },
-      { quoted: m }
-    )
+    if (!cfResponse.success || !cfResponse.result) {
+      return { success: false, error: 'No se pudo obtener token captcha' }
+    }
 
-    const { data } = await axios.get(API_URL, {
-      params: {
-        url: video.url,
-        apikey: API_KEY
-      },
-      headers: {
-        "User-Agent": "Mozilla/5.0",
-        "Accept": "application/json"
-      },
-      timeout: 20000
+    const convertApiUrl = 'https://ds1.ezsrv.net/api/convert'
+    const convertPayload = {
+      url: videoUrl,
+      quality: '320',
+      trim: false,
+      startT: 0,
+      endT: 0,
+      captchaToken: cfResponse.result
+    }
+
+    const { data: convertResponse } = await axios.post(convertApiUrl, convertPayload, {
+      headers: { 'Content-Type': 'application/json' },
+      timeout: 60000
     })
 
-    const audioUrl =
-      data?.data?.url ||
-      data?.datos?.url ||
-      null
+    if (convertResponse.status !== 'done') {
+      return { success: false, error: 'Falló la conversión' }
+    }
 
-    if (!audioUrl || !/^https?:\/\//i.test(audioUrl)) throw 0
+    return {
+      success: true,
+      data: {
+        title: convertResponse.title,
+        downloadUrl: convertResponse.url,
+        quality: '320kbps'
+      }
+    }
 
-    await conn.sendMessage(
-      m.chat,
-      {
-        audio: { url: audioUrl },
-        mimetype: "audio/mpeg",
-        fileName: cleanName(video.title) + ".mp3",
-        ptt: false
-      },
-      { quoted: m }
-    )
-
-    await conn.sendMessage(m.chat, {
-      react: { text: "✅", key: m.key }
-    })
-
-  } catch {
-    await m.reply("❌ Error al obtener el audio.")
+  } catch (e) {
+    return { success: false, error: e.message }
   }
 }
 
-const cleanName = t =>
-  t.replace(/[^\w\s.-]/gi, "").substring(0, 60)
+async function searchMusicByName(query) {
+  try {
+    const search = await yts(query)
+    if (!search.videos.length) {
+      return { success: false }
+    }
 
-const formatViews = v => {
-  if (typeof v !== "number") return v
-  if (v >= 1e9) return (v / 1e9).toFixed(1) + "B"
-  if (v >= 1e6) return (v / 1e6).toFixed(1) + "M"
-  if (v >= 1e3) return (v / 1e3).toFixed(1) + "K"
-  return v.toString()
+    const v = search.videos[0]
+    return {
+      success: true,
+      data: {
+        title: v.title,
+        url: v.url,
+        thumbnail: `https://i.ytimg.com/vi/${v.videoId}/hqdefault.jpg`,
+        duration: v.timestamp,
+        channel: v.author.name,
+        views: v.views.toLocaleString()
+      }
+    }
+  } catch {
+    return { success: false }
+  }
 }
 
-handler.command = ["play", "yt", "mp3"]
-handler.tags = ["descargas"]
-handler.register = true
+let handler = async (m, { conn, args }) => {
+  const user = m.sender
+  const chat = m.chat
+
+  if (cooldowns.has(user) && cooldowns.get(user) > Date.now()) {
+    return conn.sendMessage(chat, { text: '⏳ Espera un poco antes de usar el comando otra vez' }, { quoted: m })
+  }
+
+  if (!args.length) {
+    return conn.sendMessage(chat, { text: 'Usa .play <nombre de canción>' }, { quoted: m })
+  }
+
+  cooldowns.set(user, Date.now() + COOLDOWN_TIME)
+
+  const search = await searchMusicByName(args.join(' '))
+  if (!search.success) {
+    cooldowns.delete(user)
+    return conn.sendMessage(chat, { text: 'No se encontró nada' }, { quoted: m })
+  }
+
+  const { title, url, duration, channel } = search.data
+
+  const audio = await downloadYoutubeAudio(url)
+  if (!audio.success) {
+    cooldowns.delete(user)
+    return conn.sendMessage(chat, { text: '❌ Error al obtener el audio' }, { quoted: m })
+  }
+
+  const res = await fetch(audio.data.downloadUrl)
+  if (!res.ok) throw new Error('Error al descargar')
+
+  const buffer = await res.buffer()
+
+  await conn.sendMessage(chat, {
+    audio: buffer,
+    mimetype: 'audio/mpeg',
+    fileName: `${title}.mp3`,
+    caption: `🎵 ${title}\n👤 ${channel}\n⏱ ${duration}`
+  }, { quoted: m })
+
+  setTimeout(() => cooldowns.delete(user), COOLDOWN_TIME)
+}
+
+handler.help = ['play']
+handler.tags = ['dl']
+handler.command = ['play']
 
 export default handler
