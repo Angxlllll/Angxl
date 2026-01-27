@@ -13,8 +13,8 @@ const handler = async (m, { conn, args }) => {
   })
 
   try {
-    const search = await yts(query)
-    const video = search.videos[0]
+    const search = await yts(query, { limit: 1 })
+    const video = search?.videos?.[0]
     if (!video) throw 0
 
     await conn.sendMessage(
@@ -37,6 +37,10 @@ const handler = async (m, { conn, args }) => {
       params: {
         url: video.url,
         apikey: API_KEY
+      },
+      headers: {
+        "User-Agent": "Mozilla/5.0",
+        "Accept": "application/json"
       },
       timeout: 20000
     })
@@ -76,5 +80,6 @@ const formatViews = v => {
 
 handler.command = ["play", "yt", "mp3"]
 handler.tags = ["descargas"]
+handler.register = true
 
 export default handler
