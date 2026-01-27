@@ -9,7 +9,7 @@ import pino from 'pino'
 import yargs from 'yargs'
 import syntaxerror from 'syntax-error'
 
-import { makeWASocket } from './lib/simple.js'
+import makeWASocket from '@whiskeysockets/baileys'
 import store from './lib/store.js'
 
 import pkg from 'google-libphonenumber'
