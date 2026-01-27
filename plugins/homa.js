@@ -1,5 +1,10 @@
-import pkg from '@whiskeysockets/baileys'
-const { generateWAMessageContent, generateWAMessageFromContent, proto } = pkg
+import * as baileys from '@whiskeysockets/baileys'
+
+const {
+  generateWAMessageContent,
+  generateWAMessageFromContent,
+  proto
+} = baileys
 
 let handler = async (m, { conn }) => {
 
