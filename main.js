@@ -23,15 +23,6 @@ import store from './lib/store.js'
 import pkg from 'google-libphonenumber'
 const { PhoneNumberUtil } = pkg
 
-const {
-  DisconnectReason,
-  useMultiFileAuthState,
-  fetchLatestBaileysVersion,
-  makeCacheableSignalKeyStore,
-  jidNormalizedUser,
-  Browsers
-} = await import('@whiskeysockets/baileys')
-
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const phoneUtil = PhoneNumberUtil.getInstance()
 
