@@ -1,15 +1,17 @@
-const handler = async (m, { conn, participants }) => {
+const handler = async (m, { conn }) => {
+  if (!m.isGroup) return
+
   const user = m.mentionedJid?.[0] || m.quoted?.sender
+  if (!user) return m.reply('☁️ Responde o menciona al usuario.')
 
-  if (!user)
-    return m.reply('☁️ *Responde o menciona al usuario*.')
+  const metadata = await conn.groupMetadata(m.chat)
+  const participants = metadata.participants || []
 
-  const target = user.replace(/[^0-9]/g, '')
+  const targetNum = user.replace(/\D/g, '')
 
-  const participant = participants.find(p => {
-    const jid = (p.jid || p.id || '').replace(/[^0-9]/g, '')
-    return jid === target
-  })
+  const participant = participants.find(p =>
+    p.id.replace(/\D/g, '') === targetNum
+  )
 
   if (!participant)
     return m.reply('❌ Usuario no encontrado en el grupo.')
@@ -18,8 +20,8 @@ const handler = async (m, { conn, participants }) => {
     return conn.sendMessage(
       m.chat,
       {
-        text: `ℹ️ @${target} *no era admin*.`,
-        mentions: [participant.jid || participant.id]
+        text: `ℹ️ @${targetNum} *no era admin*.`,
+        mentions: [participant.id]
       },
       { quoted: m }
     )
@@ -30,15 +32,15 @@ const handler = async (m, { conn, participants }) => {
   try {
     await conn.groupParticipantsUpdate(
       m.chat,
-      [participant.jid || participant.id],
+      [participant.id],
       'demote'
     )
 
     await conn.sendMessage(
       m.chat,
       {
-        text: `✅ *Admin quitado a:* @${target}`,
-        mentions: [participant.jid || participant.id]
+        text: `✅ *Admin quitado a:* @${targetNum}`,
+        mentions: [participant.id]
       },
       { quoted: m }
     )
@@ -52,6 +54,5 @@ handler.group = true
 handler.admin = true
 handler.help = ['demote']
 handler.tags = ['grupos']
-handler.customPrefix = /^\.?(demote|quitaradmin|removeadmin)/i
-
+handler.customPrefix = /^.?(demote|quitaradmin|removeadmin)/i
 export default handler
