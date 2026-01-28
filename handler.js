@@ -128,7 +128,8 @@ async function handleMessage(m) {
     groupMetadata = cached.meta
     participants = groupMetadata.participants || []
     isAdmin = cached.adminNums.has(senderNum)
-    isBotAdmin = cached.adminNums.has(DIGITS(this.user.jid))
+    const botJid = decodeJid(this.user?.id || this.user?.jid)
+isBotAdmin = cached.adminNums.has(DIGITS(botJid))
   }
 
   for (const plugin of Object.values(global.plugins)) {
