@@ -122,11 +122,7 @@ const handler = async (m, { conn, participants }) => {
 
   for (const p of participants) {
     const jid = p.jid || p.id
-    mentions.push(jid)
-
-    lines.push(
-      `${emoji} ${getFlag(jid)} @${jid.split('@')[0]}`
-    )
+if (!jid || !jid.includes('@')) continue
   }
 
   const text = `!  MENCION GENERAL  !
