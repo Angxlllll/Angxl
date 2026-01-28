@@ -86,17 +86,6 @@ const connectionOptions = {
 
 global.conn = makeWASocket(connectionOptions)
 
-if (opcion === '2') {
-  console.log(chalk.cyanBright('\nIngresa tu número con código país\n'))
-  phoneNumber = await question('--> ')
-  const clean = phoneNumber.replace(/\D/g, '')
-
-  const code = await conn.requestPairingCode(clean)
-
-  console.log(chalk.greenBright('\nIngresa este código:\n'))
-  console.log(chalk.bold(code.match(/.{1,4}/g).join(' ')))
-}
-
 let handler = await import('./handler.js')
 let isInit = true
 
@@ -163,6 +152,18 @@ async function reloadHandler(restart) {
 }
 
 await reloadHandler()
+
+/* ✅ EL ÚNICO CAMBIO IMPORTANTE: EL PAIRING VA AQUÍ */
+if (opcion === '2') {
+  console.log(chalk.cyanBright('\nIngresa tu número con código país\n'))
+  phoneNumber = await question('--> ')
+  const clean = phoneNumber.replace(/\D/g, '')
+
+  const code = await conn.requestPairingCode(clean)
+
+  console.log(chalk.greenBright('\nIngresa este código:\n'))
+  console.log(chalk.bold(code.match(/.{1,4}/g).join(' ')))
+}
 
 const pluginRoot = path.join(__dirname, 'plugins')
 global.plugins = {}
