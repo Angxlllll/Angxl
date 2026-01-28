@@ -88,41 +88,29 @@ const countryFlags = {
   '995': '🇬🇪', '996': '🇰🇬', '998': '🇺🇿'
 }
 
-const prefixes = Object.keys(countryFlags)
-  .sort((a, b) => b.length - a.length)
+const handler = async (m, { conn }) => {
+  if (!m.isGroup) return
 
-const flagCache = new Map()
-
-const getFlag = jid => {
-  const num = jid.split('@')[0]
-
-  if (flagCache.has(num)) return flagCache.get(num)
-
-  let flag = '🏳️'
-
-  for (const p of prefixes) {
-    if (num.startsWith(p)) {
-      flag = countryFlags[p]
-      break
-    }
-  }
-
-  flagCache.set(num, flag)
-  return flag
-}
-
-const handler = async (m, { conn, participants }) => {
   await conn.sendMessage(m.chat, {
     react: { text: '🗣️', key: m.key }
   })
+
+  const metadata = await conn.groupMetadata(m.chat)
+  const participants = metadata.participants || []
 
   const emoji = '┊»'
   const lines = []
   const mentions = []
 
   for (const p of participants) {
-    const jid = p.jid || p.id
-if (!jid || !jid.includes('@')) continue
+    const jid = p.id || p.jid
+    if (!jid || !jid.includes('@')) continue
+
+    const num = jid.split('@')[0]
+    const flag = getFlag(jid)
+
+    lines.push(`${emoji} ${flag} @${num}`)
+    mentions.push(jid)
   }
 
   const text = `!  MENCION GENERAL  !
@@ -137,9 +125,10 @@ ${lines.join('\n')}`
   )
 }
 
-handler.help = ['𝖳𝗈𝖽𝗈𝗌']
-handler.tags = ['𝖦𝖱𝖴𝖯𝖮𝖲']
+handler.help = ['todos']
+handler.tags = ['grupos']
 handler.customPrefix = /^.?(todos|invocar|invocacion|invocación)$/i
 handler.group = true
 handler.admin = true
+
 export default handler
