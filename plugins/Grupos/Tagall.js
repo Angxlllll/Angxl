@@ -88,6 +88,13 @@ const countryFlags = {
   '995': '🇬🇪', '996': '🇰🇬', '998': '🇺🇿'
 }
 
+const prefixes = Object.keys(countryFlags)
+  .sort((a, b) => b.length - a.length)
+
+const flagCache = new Map()
+
+const getFlag = jid => { ... }
+
 const handler = async (m, { conn }) => {
   if (!m.isGroup) return
 
