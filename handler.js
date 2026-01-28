@@ -1,4 +1,4 @@
-import smsg from "./lib/simple.js"
+import { smsg, decodeJid } from "./lib/simple.js"
 
 const DIGITS = s => String(s || "").replace(/\D/g, "")
 
@@ -63,7 +63,8 @@ async function handleMessage(raw) {
     meta = data.meta
     isAdmin = data.admins.has(senderNum)
 
-    isBotAdmin = data.admins.has(DIGITS(this.user.id))
+    const botJid = decodeJid(this.user.id)
+    isBotAdmin = data.admins.has(DIGITS(botJid))
   }
 
   for (const plugin of Object.values(global.plugins)) {
