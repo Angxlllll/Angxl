@@ -88,20 +88,19 @@ const countryFlags = {
   '995': '🇬🇪', '996': '🇰🇬', '998': '🇺🇿'
 }
 
-const prefixes = Object.keys(countryFlags)
-  .sort((a, b) => b.length - a.length)
-
 const flagCache = new Map()
 
 const getFlag = jid => {
-  const num = jid.split('@')[0]
+  const num = jid.split('@')[0].replace(/\D/g, '')
 
   if (flagCache.has(num)) return flagCache.get(num)
 
   let flag = '🏳️'
-  for (const p of prefixes) {
-    if (num.startsWith(p)) {
-      flag = countryFlags[p]
+
+  for (let len = 3; len >= 1; len--) {
+    const prefix = num.slice(0, len)
+    if (countryFlags[prefix]) {
+      flag = countryFlags[prefix]
       break
     }
   }
