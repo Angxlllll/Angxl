@@ -4,11 +4,12 @@ const handler = async (m, { conn, participants }) => {
   if (!user)
     return m.reply('☁️ *Responde o menciona al usuario*.')
 
-  const targetNum = user.replace(/\D/g, '')
+  const target = user.replace(/[^0-9]/g, '')
 
-  const participant = participants.find(p =>
-    p.id?.replace(/\D/g, '') === targetNum
-  )
+  const participant = participants.find(p => {
+    const jid = (p.jid || p.id || '').replace(/[^0-9]/g, '')
+    return jid === target
+  })
 
   if (!participant)
     return m.reply('❌ Usuario no encontrado en el grupo.')
@@ -17,8 +18,8 @@ const handler = async (m, { conn, participants }) => {
     return conn.sendMessage(
       m.chat,
       {
-        text: `ℹ️ @${targetNum} *no era admin*.`,
-        mentions: [participant.id]
+        text: `ℹ️ @${target} *no era admin*.`,
+        mentions: [participant.jid || participant.id]
       },
       { quoted: m }
     )
@@ -29,27 +30,28 @@ const handler = async (m, { conn, participants }) => {
   try {
     await conn.groupParticipantsUpdate(
       m.chat,
-      [participant.id],
+      [participant.jid || participant.id],
       'demote'
     )
 
     await conn.sendMessage(
       m.chat,
       {
-        text: `✅ *Admin quitado a:* @${targetNum}`,
-        mentions: [participant.id]
+        text: `✅ *Admin quitado a:* @${target}`,
+        mentions: [participant.jid || participant.id]
       },
       { quoted: m }
     )
-  } catch {
+  } catch (e) {
+    console.error(e)
     await m.reply('❌ Error al quitar admin.')
   }
 }
 
-
 handler.group = true
 handler.admin = true
-handler.help = ["𝖣𝖾𝗆𝗈𝗍𝖾"];
-handler.tags = ["𝖦𝖱𝖴𝖯𝖮𝖲"];
+handler.help = ['demote']
+handler.tags = ['grupos']
 handler.customPrefix = /^\.?(demote|quitaradmin|removeadmin)/i
+
 export default handler
