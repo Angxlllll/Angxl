@@ -63,8 +63,7 @@ async function handleMessage(raw) {
     meta = data.meta
     isAdmin = data.admins.has(senderNum)
 
-    const botJid = decodeJid(this.user.id)
-    isBotAdmin = data.admins.has(DIGITS(botJid))
+    isBotAdmin = data.admins.has(DIGITS(this.user.id))
   }
 
   for (const plugin of Object.values(global.plugins)) {
