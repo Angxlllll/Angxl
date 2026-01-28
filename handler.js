@@ -1,4 +1,4 @@
-import { smsg, decodeJid } from "./lib/simple.js"
+import smsg from "./lib/simple.js"
 
 const DIGITS = s => String(s || "").replace(/\D/g, "")
 
