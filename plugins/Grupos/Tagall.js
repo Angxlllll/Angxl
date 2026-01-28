@@ -93,7 +93,22 @@ const prefixes = Object.keys(countryFlags)
 
 const flagCache = new Map()
 
-const getFlag = jid => { ... }
+const getFlag = jid => {
+  const num = jid.split('@')[0]
+
+  if (flagCache.has(num)) return flagCache.get(num)
+
+  let flag = '🏳️'
+  for (const p of prefixes) {
+    if (num.startsWith(p)) {
+      flag = countryFlags[p]
+      break
+    }
+  }
+
+  flagCache.set(num, flag)
+  return flag
+}
 
 const handler = async (m, { conn }) => {
   if (!m.isGroup) return
