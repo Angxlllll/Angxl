@@ -18,6 +18,7 @@ const {
   Browsers,
   makeWASocket
 } = await import('@whiskeysockets/baileys')
+
 import store from './lib/store.js'
 
 import pkg from 'google-libphonenumber'
@@ -86,14 +87,9 @@ const connectionOptions = {
 global.conn = makeWASocket(connectionOptions)
 
 await new Promise(resolve => {
-  const wait = u => {
-    if (u.connection === 'open' || u.connection === 'connecting') {
-      conn.ev.off('connection.update', wait)
-      resolve()
-    }
-  }
-  conn.ev.on('connection.update', wait)
+  ...
 })
+*/
 
 if (opcion === '2') {
   console.log(chalk.cyanBright('\nIngresa tu número con código país\n'))
@@ -126,7 +122,6 @@ async function connectionUpdate(update) {
           await conn.sendMessage(data.chatId, {
             text: `✅ *${global.namebot} está en línea nuevamente* 🚀`
           })
-          console.log(chalk.yellow('📢 Aviso de reinicio enviado correctamente.'))
         }
         fs.unlinkSync(restarterFile)
       } catch (err) {
@@ -141,6 +136,7 @@ async function connectionUpdate(update) {
     }
   }
 }
+
 async function reloadHandler(restart) {
   try {
     const mod = await import(`./handler.js?update=${Date.now()}`)
