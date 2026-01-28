@@ -1,33 +1,30 @@
-const handler = async (m, { conn }) => {
-  if (!m.isGroup) return
-
+const handler = async (m, { conn, participants }) => {
   const user = m.mentionedJid?.[0] || m.quoted?.sender
-  if (!user) return m.reply('☁️ Responde o menciona al usuario.')
 
-  const metadata = await conn.groupMetadata(m.chat)
-  const participants = metadata.participants || []
+  if (!user) return m.reply('☁️ Responde o menciona al usuario.')
 
   const targetNum = user.replace(/\D/g, '')
 
   const participant = participants.find(p =>
-    p.id.replace(/\D/g, '') === targetNum
+    (p.id || '').replace(/\D/g, '') === targetNum
   )
 
-  if (!participant)
-    return m.reply('❌ Usuario no encontrado en el grupo.')
+  if (!participant) return m.reply('❌ Usuario no encontrado en el grupo.')
 
-  if (!participant.admin)
+  if (!participant.admin) {
     return conn.sendMessage(
       m.chat,
       {
-        text: `ℹ️ @${targetNum} *no era admin*.`,
+        text: `ℹ️ @${targetNum} no era admin.`,
         mentions: [participant.id]
       },
       { quoted: m }
     )
+  }
 
-  if (participant.admin === 'superadmin')
+  if (participant.admin === 'superadmin') {
     return m.reply('👑 No puedes quitar admin al creador del grupo.')
+  }
 
   try {
     await conn.groupParticipantsUpdate(
@@ -44,15 +41,15 @@ const handler = async (m, { conn }) => {
       },
       { quoted: m }
     )
-  } catch (e) {
-    console.error(e)
+  } catch {
     await m.reply('❌ Error al quitar admin.')
   }
 }
 
 handler.group = true
 handler.admin = true
-handler.help = ['demote']
-handler.tags = ['grupos']
+handler.help = ['𝖣𝖾𝗆𝗈𝗍𝖾']
+handler.tags = ['𝖦𝖱𝖴𝖯𝖮𝖲']
 handler.customPrefix = /^.?(demote|quitaradmin|removeadmin)/i
+
 export default handler
