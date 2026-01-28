@@ -9,20 +9,20 @@ import pino from 'pino'
 import yargs from 'yargs'
 import syntaxerror from 'syntax-error'
 
+import { makeWASocket } from './lib/simple.js'
+import store from './lib/store.js'
+
+import pkg from 'google-libphonenumber'
+const { PhoneNumberUtil } = pkg
+
 const {
   DisconnectReason,
   useMultiFileAuthState,
   fetchLatestBaileysVersion,
   makeCacheableSignalKeyStore,
   jidNormalizedUser,
-  Browsers,
-  makeWASocket
+  Browsers
 } = await import('@whiskeysockets/baileys')
-
-import store from './lib/store.js'
-
-import pkg from 'google-libphonenumber'
-const { PhoneNumberUtil } = pkg
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const phoneUtil = PhoneNumberUtil.getInstance()
@@ -86,6 +86,25 @@ const connectionOptions = {
 
 global.conn = makeWASocket(connectionOptions)
 
+await new Promise(resolve => {
+  const wait = u => {
+    if (u.connection === 'open' || u.connection === 'connecting') {
+      conn.ev.off('connection.update', wait)
+      resolve()
+    }
+  }
+  conn.ev.on('connection.update', wait)
+})
+
+if (opcion === '2') {
+  console.log(chalk.cyanBright('\nIngresa tu número con código país\n'))
+  phoneNumber = await question('--> ')
+  const clean = phoneNumber.replace(/\D/g, '')
+  const code = await conn.requestPairingCode(clean)
+  console.log(chalk.greenBright('\nIngresa este código:\n'))
+  console.log(chalk.bold(code.match(/.{1,4}/g).join(' ')))
+}
+
 let handler = await import('./handler.js')
 let isInit = true
 
@@ -95,7 +114,7 @@ async function connectionUpdate(update) {
 
   if (connection === 'open') {
     console.log(
-      chalk.greenBright(`[ ✿ ] Conectado a ${conn.user?.name || 'Bot'}`)
+      chalk.greenBright(`✿ Conectado a ${conn.user?.name || 'Bot'}`)
     )
 
     const restarterFile = './lastRestarter.json'
@@ -108,9 +127,7 @@ async function connectionUpdate(update) {
           })
         }
         fs.unlinkSync(restarterFile)
-      } catch (err) {
-        console.error('❌ Error procesando lastRestarter.json:', err)
-      }
+      } catch {}
     }
   }
 
@@ -153,18 +170,6 @@ async function reloadHandler(restart) {
 
 await reloadHandler()
 
-/* ✅ EL ÚNICO CAMBIO IMPORTANTE: EL PAIRING VA AQUÍ */
-if (opcion === '2') {
-  console.log(chalk.cyanBright('\nIngresa tu número con código país\n'))
-  phoneNumber = await question('--> ')
-  const clean = phoneNumber.replace(/\D/g, '')
-
-  const code = await conn.requestPairingCode(clean)
-
-  console.log(chalk.greenBright('\nIngresa este código:\n'))
-  console.log(chalk.bold(code.match(/.{1,4}/g).join(' ')))
-}
-
 const pluginRoot = path.join(__dirname, 'plugins')
 global.plugins = {}
 
@@ -178,10 +183,7 @@ async function loadPlugins(dir) {
       try {
         const m = await import(`${full}?update=${Date.now()}`)
         global.plugins[full] = m.default || m
-      } catch (e) {
-        console.error(chalk.red('[PLUGIN ERROR]'), full)
-        console.error(e.message)
-      }
+      } catch {}
     }
   }
 }
@@ -204,18 +206,12 @@ fs.watch(pluginRoot, { recursive: true }, async (_, file) => {
     { sourceType: 'module', allowAwaitOutsideFunction: true }
   )
 
-  if (err) {
-    console.error(chalk.red('[SYNTAX ERROR]'), file)
-    return
-  }
+  if (err) return
 
   try {
     const m = await import(`${full}?update=${Date.now()}`)
     global.plugins[full] = m.default || m
-    console.log(chalk.green('[PLUGIN RELOADED]'), file)
-  } catch (e) {
-    console.error(chalk.red('[PLUGIN RELOAD ERROR]'), file)
-  }
+  } catch {}
 })
 
 process.on('uncaughtException', err => {
