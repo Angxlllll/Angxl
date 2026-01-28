@@ -9,7 +9,15 @@ import pino from 'pino'
 import yargs from 'yargs'
 import syntaxerror from 'syntax-error'
 
-import makeWASocket from '@whiskeysockets/baileys'
+const {
+  DisconnectReason,
+  useMultiFileAuthState,
+  fetchLatestBaileysVersion,
+  makeCacheableSignalKeyStore,
+  jidNormalizedUser,
+  Browsers,
+  makeWASocket
+} = await import('@whiskeysockets/baileys')
 import store from './lib/store.js'
 
 import pkg from 'google-libphonenumber'
