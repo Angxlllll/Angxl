@@ -111,17 +111,20 @@ const handler = async (m, { conn, participants }) => {
     react: { text: '🗣️', key: m.key }
   })
 
-  const emoji = '┊»'
   const lines = []
   const mentions = []
 
   for (const p of participants) {
     const jid = p.jid || p.id
     if (!jid || !jid.includes('@')) continue
+
+    const flag = getFlag(jid)
+    lines.push(`┊» ${flag} @${jid.split('@')[0]}`)
+    mentions.push(jid)
   }
 
   const text = `!  MENCION GENERAL  !
-PARA ${participants.length} MIEMBROS 🗣️
+PARA ${mentions.length} MIEMBROS 🗣️
 
 ${lines.join('\n')}`
 
@@ -132,8 +135,8 @@ ${lines.join('\n')}`
   )
 }
 
-handler.help = ['𝖳𝗈𝖽𝗈𝗌']
-handler.tags = ['𝖦𝖱𝖴𝖯𝖮𝖲']
+handler.help = ['todos']
+handler.tags = ['grupos']
 handler.customPrefix = /^.?(todos|invocar|invocacion|invocación)$/i
 handler.group = true
 handler.admin = true
