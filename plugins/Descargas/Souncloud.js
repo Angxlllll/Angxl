@@ -44,7 +44,9 @@ let handler = async (m, { conn, args, text, usedPrefix, command }) => {
   const query = (text?.trim() || args?.join(' ') || '').trim()
   if (!query) return m.reply(`Uso: ${usedPrefix + command} <búsqueda soundcloud>`)
 
-  await m.react('⏳').catch(() => {})
+  await conn.sendMessage(m.chat, {
+    react: { text: "🕘", key: m.key }
+  }).catch(() => {})
 
   try {
     const tracks = await searchTracks(query)
@@ -60,32 +62,36 @@ let handler = async (m, { conn, args, text, usedPrefix, command }) => {
             t.format.protocol === 'progressive' &&
             (t.format.mime_type === 'audio/mpeg' || t.format.mime_type === 'audio/mp3')
         )
-
       }
 
       if (transcoding) {
-        const streamUrl = await resolveStreamUrl(transcoding.url, track.track_authorization)
+        const streamUrl = await resolveStreamUrl(
+          transcoding.url,
+          track.track_authorization
+        )
         if (streamUrl) {
           results.push({
             title: track.title,
-            artwork: track.artwork_url ? track.artwork_url.replace('-large', '-t500x500') : '',
+            artwork: track.artwork_url
+              ? track.artwork_url.replace('-large', '-t500x500')
+              : '',
             url: streamUrl,
             permalink: track.permalink_url
           })
         }
       }
-      
-      if (results.length > 0) break 
+
+      if (results.length > 0) break
     }
 
     if (results.length === 0) {
-      await m.react('✖️').catch(() => {})
+      await conn.sendMessage(m.chat, {
+        react: { text: "✖️", key: m.key }
+      }).catch(() => {})
       return m.reply('No encontré resultados reproducibles para esa búsqueda.')
     }
 
     const track = results[0]
-
-    const caption = `☁️ *SoundCloud*\n🎼 *${track.title}*`
 
     const contextInfo = {
       externalAdReply: {
@@ -108,10 +114,14 @@ let handler = async (m, { conn, args, text, usedPrefix, command }) => {
       { quoted: m }
     )
 
-    await m.react('✅').catch(() => {})
+    await conn.sendMessage(m.chat, {
+      react: { text: "✅", key: m.key }
+    }).catch(() => {})
   } catch (e) {
     console.error(e)
-    await m.react('✖️').catch(() => {})
+    await conn.sendMessage(m.chat, {
+      react: { text: "✖️", key: m.key }
+    }).catch(() => {})
     m.reply(`Error: ${e.message || e}`)
   }
 }
