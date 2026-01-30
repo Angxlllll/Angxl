@@ -13,7 +13,6 @@ const AXIOS_CFG = {
   }
 }
 
-/* retry simple */
 async function retry(fn, times = 3) {
   let lastErr
   for (let i = 0; i < times; i++) {
@@ -26,7 +25,6 @@ async function retry(fn, times = 3) {
   throw lastErr
 }
 
-/* proveedores IG en cascada */
 async function getIGMedia(url) {
   const providers = [
     async () => {
