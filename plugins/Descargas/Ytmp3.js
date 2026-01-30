@@ -7,46 +7,19 @@ const COOLDOWN_TIME = 30 * 1000
 
 async function downloadYoutubeAudio(videoUrl) {
   try {
-    const cfApiUrl = 'https://api.nekolabs.web.id/tools/bypass/cf-turnstile'
-    const cfPayload = {
-      url: 'https://ezconv.cc',
-      siteKey: '0x4AAAAAAAi2NuZzwS99-7op'
-    }
+    const apiUrl = `https://www.yt2mp3converter.net/apis/fetch.php?url=${encodeURIComponent(videoUrl)}&format=mp3`
+    const { data } = await axios.get(apiUrl, { timeout: 60000 })
 
-    const { data: cfResponse } = await axios.post(cfApiUrl, cfPayload)
-
-    if (!cfResponse.success || !cfResponse.result) {
-      return { success: false, error: 'No se pudo obtener el token de captcha' }
-    }
-
-    const captchaToken = cfResponse.result
-
-    const convertApiUrl = 'https://ezconv.cc/api/convert'
-    const convertPayload = {
-      url: videoUrl,
-      quality: '320',
-      trim: false,
-      startT: 0,
-      endT: 0,
-      captchaToken
-    }
-
-    const { data: convertResponse } = await axios.post(convertApiUrl, convertPayload, {
-      headers: { 'Content-Type': 'application/json' },
-      timeout: 60000
-    })
-
-    if (convertResponse.status !== 'done') {
-      return { success: false, error: `La conversión falló. Estado: ${convertResponse.status}` }
+    if (!data || !data.download || !data.title) {
+      return { success: false, error: 'No se pudo convertir el audio' }
     }
 
     return {
       success: true,
       data: {
-        title: convertResponse.title,
-        downloadUrl: convertResponse.url,
-        status: convertResponse.status,
-        quality: '320kbps'
+        title: data.title,
+        downloadUrl: data.download,
+        quality: 'mp3'
       }
     }
   } catch (error) {
@@ -70,7 +43,6 @@ async function searchMusicByName(query) {
       data: {
         title: video.title,
         url: video.url,
-        thumbnail: `https://i.ytimg.com/vi/${video.videoId}/hqdefault.jpg`,
         duration: video.timestamp,
         channel: video.author.name,
         views: video.views.toLocaleString()
@@ -101,8 +73,8 @@ let handler = async (m, { conn, args }) => {
 
   try {
     const searchMsg = await m.reply(`🔍 *Buscando:* "${searchQuery}"`)
-
     const searchResult = await searchMusicByName(searchQuery)
+
     if (!searchResult.success) {
       cooldowns.delete(userId)
       await conn.sendMessage(m.chat, { text: '❌ No se encontró el video', edit: searchMsg.key })
@@ -117,6 +89,7 @@ let handler = async (m, { conn, args }) => {
     })
 
     const audioResult = await downloadYoutubeAudio(url)
+
     if (!audioResult.success) {
       cooldowns.delete(userId)
       await conn.sendMessage(m.chat, { text: audioResult.error, edit: searchMsg.key })
@@ -204,7 +177,7 @@ let handler2 = async (m, { conn, args }) => {
   }
 }
 
-handler.help = ['play']
+handler.help = ['play <nombre>']
 handler.tags = ['dl', 'audio']
 handler.command = ['ply', 'pa', 'musica'];
 
