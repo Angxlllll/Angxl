@@ -17,16 +17,11 @@ const HEADERS = {
 
 async function scrapeSpotify(spotifyUrl) {
   try {
-    const homeResponse = await client.get(`${BASE_URL}/en1`, {
-      headers: HEADERS
-    })
+    const homeResponse = await client.get(`${BASE_URL}/en1`, { headers: HEADERS })
 
     const $ = cheerio.load(homeResponse.data)
     const csrfToken = $('meta[name="csrf-token"]').attr('content')
-
-    if (!csrfToken) {
-      throw new Error('Could not find CSRF token')
-    }
+    if (!csrfToken) throw new Error('CSRF token not found')
 
     const apiHeaders = {
       ...HEADERS,
@@ -34,71 +29,65 @@ async function scrapeSpotify(spotifyUrl) {
       'Content-Type': 'application/json'
     }
 
-    const metaPayload = { spotify_url: spotifyUrl }
-    const metaResponse = await client.post(`${BASE_URL}/getTrackData`, metaPayload, {
-      headers: apiHeaders
-    })
+    const metaResponse = await client.post(
+      `${BASE_URL}/getTrackData`,
+      { spotify_url: spotifyUrl },
+      { headers: apiHeaders }
+    )
 
     const meta = metaResponse.data
-
     let name = 'Unknown'
     let cover = ''
+
     if (meta) {
       if (meta.name) {
-        const artist = meta.artists && meta.artists.length > 0 ? meta.artists[0].name : ''
+        const artist =
+          meta.artists && meta.artists.length > 0 ? meta.artists[0].name : ''
         name = artist ? `${meta.name} - ${artist}` : meta.name
       }
       cover = meta.album?.images?.[0]?.url || ''
     }
 
-    const convertPayload = { urls: spotifyUrl }
-    const convertResponse = await client.post(`${BASE_URL}/convert`, convertPayload, {
-      headers: apiHeaders
-    })
+    const convertResponse = await client.post(
+      `${BASE_URL}/convert`,
+      { urls: spotifyUrl },
+      { headers: apiHeaders }
+    )
 
     const convertData = convertResponse.data
 
     if (convertData.status === 'queued' && convertData.task_id) {
       const taskId = convertData.task_id
+
       for (let i = 0; i < 20; i++) {
-        await new Promise((r) => setTimeout(r, 2000))
+        await new Promise(r => setTimeout(r, 2000))
 
-        try {
-          const checkRes = await client.post(
-            `${BASE_URL}/status`,
-            { taskId: taskId },
-            { headers: apiHeaders }
-          )
-          const checkData = checkRes.data
+        const checkRes = await client.post(
+          `${BASE_URL}/status`,
+          { taskId },
+          { headers: apiHeaders }
+        )
 
-          if (checkData.status === 'success' || checkData.status === 'finished') {
-            const dl = checkData.download || checkData.url || checkData.result
-            if (dl) {
-              return {
-                name,
-                cover,
-                path: dl
-              }
-            }
-          }
-        } catch (e) {
-          // ignore poller errors
+        const checkData = checkRes.data
+        if (checkData.status === 'success' || checkData.status === 'finished') {
+          const dl = checkData.download || checkData.url || checkData.result
+          if (dl) return { name, cover, path: dl }
         }
       }
+
       return { error: 'Timeout waiting for conversion' }
     }
 
-    if (!convertData || convertData.error) {
-      return { error: 'Conversion failed', detail: convertData }
-    }
+    if (!convertData || convertData.error)
+      return { error: 'Conversion failed' }
 
     return {
       name,
       cover,
       path: convertData.url || convertData.download
     }
-  } catch (error) {
-    return { error: error.message }
+  } catch (e) {
+    return { error: e.message }
   }
 }
 
@@ -106,22 +95,22 @@ let handler = async (m, { conn, args, text, usedPrefix, command }) => {
   const url = (text?.trim() || args?.[0] || '').trim()
   if (!url) return m.reply(`Uso: ${usedPrefix + command} <link de spotify>`)
 
-  if (!/spotify\.com/.test(url)) {
-    return m.reply('❌ Link inválido. Solo se soportan links de Spotify.')
-  }
+  if (!/spotify\.com/.test(url))
+    return m.reply('❌ Link inválido. Solo Spotify.')
 
-  await m.react('⏳').catch(() => {})
+  await conn.sendMessage(m.chat, {
+    react: { text: "🕘", key: m.key }
+  }).catch(() => {})
 
   try {
     const result = await scrapeSpotify(url)
 
     if (result.error || !result.path) {
-      await m.react('✖️').catch(() => {})
-      return m.reply(`Error descargando canción: ${result.error || 'Desconocido'}`)
+      await conn.sendMessage(m.chat, {
+        react: { text: "✖️", key: m.key }
+      }).catch(() => {})
+      return m.reply(`Error descargando canción`)
     }
-
-    const caption = `🎵 *${result.name}*\n🔗 Link: ${url}`
-
 
     const contextInfo = {
       externalAdReply: {
@@ -144,10 +133,13 @@ let handler = async (m, { conn, args, text, usedPrefix, command }) => {
       { quoted: m }
     )
 
-    await m.react('✅').catch(() => {})
+    await conn.sendMessage(m.chat, {
+      react: { text: "✅", key: m.key }
+    }).catch(() => {})
   } catch (e) {
-    console.error(e)
-    await m.react('✖️').catch(() => {})
+    await conn.sendMessage(m.chat, {
+      react: { text: "✖️", key: m.key }
+    }).catch(() => {})
     m.reply(`Error: ${e.message || e}`)
   }
 }
