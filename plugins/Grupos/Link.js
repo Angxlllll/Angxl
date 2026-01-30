@@ -50,14 +50,14 @@ const handler = async (m, { conn }) => {
     }
 
     const buttons = [
-  {
-    name: "cta_url",
-    buttonParamsJson: JSON.stringify({
-      display_text: "𝗔𝗯𝗿𝗶𝗿 𝗘𝗻𝗹𝗮𝗰𝗲",
-      url: link
-    })
-  }
-]
+      {
+        name: "cta_copy",
+        buttonParamsJson: JSON.stringify({
+          display_text: "𝗖𝗼𝗽𝗶𝗮𝗿 𝗘𝗻𝗹𝗮𝗰𝗲",
+          copy_code: link
+        })
+      }
+    ]
 
     const { imageMessage } = await generateWAMessageContent(
       { image: ppBuffer },
@@ -102,10 +102,10 @@ const handler = async (m, { conn }) => {
   }
 }
 
-handler.help = ["𝖫𝗂𝗇𝗄"]
-handler.tags = ["𝖦𝖱𝖴𝖯𝖮𝖲"]
-handler.customPrefix = /^\.?(link)$/i
-handler.command = new RegExp()
+handler.help = ['link']
+handler.tags = ['grupo']
+handler.command = ['link', 'damelink', 'linkgrupo']
 handler.group = true
+handler.botAdmin = true
 
 export default handler
