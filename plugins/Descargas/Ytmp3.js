@@ -1,10 +1,9 @@
-// .ytmp3 usando https://ytdl.sylphy.xyz
 import axios from "axios"
 import yts from "yt-search"
 
 let handler = async (m, { conn, args, usedPrefix, command }) => {
   const text = args.join(" ").trim()
-  if (!text) return m.reply(`Usa: ${usedPrefix + command} <nombre o link>`)
+  if (!text) return m.reply(`Uso: ${usedPrefix + command} <link o nombre>`)
 
 
   try {
@@ -13,20 +12,36 @@ let handler = async (m, { conn, args, usedPrefix, command }) => {
 
     if (!/^https?:\/\//.test(text)) {
       const search = await yts(text)
-      if (!search.videos.length) throw "No encontré resultados"
+      if (!search.videos.length) throw "Sin resultados"
       url = search.videos[0].url
       title = search.videos[0].title
     }
 
-    const api = `https://ytdl.sylphy.xyz/api/download?url=${encodeURIComponent(url)}&format=mp3`
-    const { data } = await axios.get(api)
+    // 1️⃣ convertir
+    const convert = await axios.post(
+      "https://ytdl.sylphy.xyz/api/convert",
+      {
+        url,
+        format: "mp3",
+        quality: 128
+      },
+      {
+        headers: {
+          "Content-Type": "application/json"
+        }
+      }
+    )
 
-    if (!data?.url) throw "Error al convertir"
+    const id = convert.data?.id
+    if (!id) throw "No se pudo convertir"
+
+    // 2️⃣ obtener link final
+    const dl = `https://ytdl.sylphy.xyz/api/download/${id}`
 
     await conn.sendMessage(
       m.chat,
       {
-        audio: { url: data.url },
+        audio: { url: dl },
         mimetype: "audio/mpeg",
         fileName: `${title}.mp3`
       },
@@ -34,6 +49,7 @@ let handler = async (m, { conn, args, usedPrefix, command }) => {
     )
 
   } catch (e) {
+    console.error(e)
     m.reply("Error al descargar el audio")
   }
 }
