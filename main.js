@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url'
 import readline from 'readline'
 import chalk from 'chalk'
 import pino from 'pino'
+import NodeCache from 'node-cache'
 import yargs from 'yargs'
 import syntaxerror from 'syntax-error'
 
