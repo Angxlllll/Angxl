@@ -11,48 +11,53 @@ let handler = async (m, { conn, args, usedPrefix, command }) => {
     let url = text
     let title = "audio"
 
-    // 🔎 búsqueda si no es link
     if (!/^https?:\/\//.test(text)) {
-      const search = await yts(text)
-      if (!search.videos.length)
-        throw new Error("❌ No se encontraron resultados en YouTube")
-      url = search.videos[0].url
-      title = search.videos[0].title
+      const r = await yts(text)
+      if (!r.videos.length) throw new Error("Sin resultados en YouTube")
+      url = r.videos[0].url
+      title = r.videos[0].title
     }
 
-    // 📥 petición HTML
-    const res = await axios.get(
-      "https://ytdl.sylphy.xyz/download",
+    // 1️⃣ POST real (formulario)
+    const form = new URLSearchParams()
+    form.append("url", url)
+    form.append("format", "mp3")
+    form.append("quality", "128")
+
+    const res = await axios.post(
+      "https://ytdl.sylphy.xyz/",
+      form.toString(),
       {
-        params: {
-          url,
-          format: "mp3",
-          quality: 128
-        },
         headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
           "User-Agent": "Mozilla/5.0"
-        }
+        },
+        maxRedirects: 0,
+        validateStatus: s => s === 302 || s === 200
       }
     )
 
-    if (!res.data)
-      throw new Error("❌ El servidor no devolvió HTML")
+    // 2️⃣ detectar redirección
+    const redirect = res.headers.location
+    if (!redirect)
+      throw new Error("No hubo redirección (bloqueo del servidor)")
 
-    // 🧠 parsear HTML
-    const $ = cheerio.load(res.data)
+    // 3️⃣ pedir HTML final
+    const page = await axios.get(
+      "https://ytdl.sylphy.xyz" + redirect,
+      { headers: { "User-Agent": "Mozilla/5.0" } }
+    )
 
-    const downloadUrl =
-      $("a:contains('Download File')").attr("href") ||
-      $("a.btn-success").attr("href")
+    const $ = cheerio.load(page.data)
+    const link = $("a:contains('Download File')").attr("href")
 
-    if (!downloadUrl)
-      throw new Error("❌ No se encontró el botón de descarga (HTML cambió)")
+    if (!link)
+      throw new Error("No se encontró el enlace MP3")
 
-    const finalUrl = downloadUrl.startsWith("http")
-      ? downloadUrl
-      : "https://ytdl.sylphy.xyz" + downloadUrl
+    const finalUrl = link.startsWith("http")
+      ? link
+      : "https://ytdl.sylphy.xyz" + link
 
-    // 🎧 enviar audio
     await conn.sendMessage(
       m.chat,
       {
@@ -65,15 +70,12 @@ let handler = async (m, { conn, args, usedPrefix, command }) => {
 
 
   } catch (e) {
-
-    // 💥 ERROR REAL
     m.reply(
       `⚠️ *FALLO EN YTMP3*\n\n` +
-      `📌 Motivo:\n${e.message || e}\n\n` +
-      `🧪 Detalle técnico:\n${String(e).slice(0, 300)}`
+      `📌 Motivo:\n${e.message}\n\n` +
+      `🧪 Tipo:\n${e.name}`
     )
-
-    console.error("YTMP3 ERROR:", e)
+    console.error(e)
   }
 }
 
