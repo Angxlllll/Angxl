@@ -9,7 +9,7 @@
     "start": "node main.js"
   },
   "dependencies": {
-"@whiskeysockets/baileys":"github:nstar-y/baileys",
+"@whiskeysockets/baileys":"github:ds6/buils",
     "chalk": "^5.3.0",
     "node-cache": "^5.1.2",
     "node-fetch": "^3.2.10",
