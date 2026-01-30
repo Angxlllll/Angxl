@@ -1,189 +1,79 @@
-import axios from 'axios'
-import fetch from 'node-fetch'
-import yts from 'yt-search'
+import axios from "axios"
 
-const cooldowns = new Map()
-const COOLDOWN_TIME = 30 * 1000
+const API_URL = "https://api-adonix.ultraplus.click/download/ytaudio"
+const API_KEY = "Angxlllll"
 
-async function downloadYoutubeAudio(videoUrl) {
-  try {
-    const apiUrl = `https://www.yt2mp3converter.net/apis/fetch.php?url=${encodeURIComponent(videoUrl)}&format=mp3`
-    const { data } = await axios.get(apiUrl, { timeout: 60000 })
-
-    if (!data || !data.download || !data.title) {
-      return { success: false, error: 'No se pudo convertir el audio' }
-    }
-
-    return {
-      success: true,
-      data: {
-        title: data.title,
-        downloadUrl: data.download,
-        quality: 'mp3'
-      }
-    }
-  } catch (error) {
-    return {
-      success: false,
-      error: error.response?.data ? JSON.stringify(error.response.data) : error.message
-    }
-  }
+function isYouTube(url = "") {
+  return /^https?:\/\//i.test(url) &&
+    /(youtube\.com|youtu\.be|music\.youtube\.com)/i.test(url)
 }
 
-async function searchMusicByName(query) {
-  try {
-    const search = await yts(query)
-    if (!search.videos || !search.videos.length) {
-      return { success: false, error: 'No se encontraron resultados' }
-    }
+const handler = async (m, { conn, args, usedPrefix, command }) => {
+  const url = args.join(" ").trim()
 
-    const video = search.videos[0]
-    return {
-      success: true,
-      data: {
-        title: video.title,
-        url: video.url,
-        duration: video.timestamp,
-        channel: video.author.name,
-        views: video.views.toLocaleString()
-      }
-    }
+  if (!url)
+    return m.reply(`✳️ Usa:\n${usedPrefix}${command} <url de YouTube>`)
+
+  if (!isYouTube(url))
+    return m.reply("❌ URL de YouTube inválida.")
+
+  await conn.sendMessage(m.chat, {
+    react: { text: "🕘", key: m.key }
+  })
+
+  try {
+    const { data } = await axios.get(API_URL, {
+      params: {
+        url,
+        apikey: API_KEY
+      },
+      headers: {
+        "User-Agent": "Mozilla/5.0",
+        "Accept": "application/json"
+      },
+      timeout: 20000
+    })
+
+    const result = data?.data || data?.datos
+    if (!result) throw 0
+
+    const audioUrl = result.url
+    if (!audioUrl || !/^https?:\/\//i.test(audioUrl)) throw 0
+
+    const title = result.title || "Audio"
+    const channel = result.author || "YouTube"
+    const thumbnail = result.thumbnail
+
+    await conn.sendMessage(m.chat, {
+      image: { url: thumbnail },
+      caption: `
+✧━───『 𝙄𝙣𝙛𝙤 𝙙𝙚𝙡 𝘼𝙪𝙙𝙞𝙤 』───━✧
+
+🎼 Título: ${title}
+📺 Canal: ${channel}
+
+» Enviando audio 🎧
+`.trim()
+    }, { quoted: m })
+
+    await conn.sendMessage(m.chat, {
+      audio: { url: audioUrl },
+      mimetype: "audio/mpeg",
+      fileName: title.replace(/[\\/:*?"<>|]/g, "").substring(0, 60) + ".mp3",
+      ptt: false
+    }, { quoted: m })
+
+    await conn.sendMessage(m.chat, {
+      react: { text: "✅", key: m.key }
+    })
+
   } catch {
-    return { success: false, error: 'Error en la búsqueda' }
+    await m.reply("❌ Error al obtener el audio.")
   }
 }
 
-let handler = async (m, { conn, args }) => {
-  const userId = m.sender
-
-  if (cooldowns.has(userId)) {
-    const expire = cooldowns.get(userId)
-    const remaining = expire - Date.now()
-    if (remaining > 0) {
-      return m.reply(`⏳ *Espera ${Math.ceil(remaining / 1000)} segundos* antes de otra descarga.`)
-    }
-  }
-
-  if (!args[0]) {
-    return m.reply('🎵 *Usa:* .play <nombre de canción>')
-  }
-
-  const searchQuery = args.join(' ')
-  cooldowns.set(userId, Date.now() + COOLDOWN_TIME)
-
-  try {
-    const searchMsg = await m.reply(`🔍 *Buscando:* "${searchQuery}"`)
-    const searchResult = await searchMusicByName(searchQuery)
-
-    if (!searchResult.success) {
-      cooldowns.delete(userId)
-      await conn.sendMessage(m.chat, { text: '❌ No se encontró el video', edit: searchMsg.key })
-      return
-    }
-
-    const { title, url, duration, channel, views } = searchResult.data
-
-    await conn.sendMessage(m.chat, {
-      text: `🎵 ${title}\n👤 ${channel}\n⏱️ ${duration}\n👁️ ${views}`,
-      edit: searchMsg.key
-    })
-
-    const audioResult = await downloadYoutubeAudio(url)
-
-    if (!audioResult.success) {
-      cooldowns.delete(userId)
-      await conn.sendMessage(m.chat, { text: audioResult.error, edit: searchMsg.key })
-      return
-    }
-
-    const { downloadUrl, quality } = audioResult.data
-    const cleanTitle = title.replace(/[^\w\sáéíóúÁÉÍÓÚñÑ]/gi, '').substring(0, 50).trim()
-    const fileName = `${cleanTitle}.mp3`
-
-    const audioResponse = await fetch(downloadUrl)
-    const audioBuffer = await audioResponse.buffer()
-
-    await conn.sendMessage(m.chat, {
-      audio: audioBuffer,
-      mimetype: 'audio/mpeg',
-      fileName,
-      caption: `${title}\n${quality}`,
-      quoted: m
-    })
-
-    setTimeout(() => cooldowns.delete(userId), COOLDOWN_TIME)
-  } catch (error) {
-    cooldowns.delete(userId)
-    await m.reply(error.message)
-  }
-}
-
-let handler2 = async (m, { conn, args }) => {
-  const userId = m.sender
-
-  if (cooldowns.has(userId)) {
-    const expire = cooldowns.get(userId)
-    const remaining = expire - Date.now()
-    if (remaining > 0) {
-      return m.reply(`⏳ *Espera ${Math.ceil(remaining / 1000)} segundos* antes de otra descarga.`)
-    }
-  }
-
-  if (!args[0]) {
-    return m.reply('🎵 *Usa:* .ytmp3 <URL>')
-  }
-
-  let videoUrl = args[0]
-  if (!videoUrl.match(/(youtube\.com|youtu\.be)/)) {
-    return m.reply('❌ URL inválida')
-  }
-
-  if (videoUrl.includes('youtu.be/')) {
-    const id = videoUrl.split('youtu.be/')[1].split('?')[0]
-    videoUrl = `https://www.youtube.com/watch?v=${id}`
-  }
-
-  cooldowns.set(userId, Date.now() + COOLDOWN_TIME)
-
-  try {
-    const processingMsg = await m.reply('Procesando...')
-    const result = await downloadYoutubeAudio(videoUrl)
-
-    if (!result.success) {
-      cooldowns.delete(userId)
-      await conn.sendMessage(m.chat, { text: result.error, edit: processingMsg.key })
-      return
-    }
-
-    const { title, downloadUrl, quality } = result.data
-    const cleanTitle = title.replace(/[^\w\sáéíóúÁÉÍÓÚñÑ]/gi, '').substring(0, 50).trim()
-    const fileName = `${cleanTitle}.mp3`
-
-    const audioResponse = await fetch(downloadUrl)
-    const audioBuffer = await audioResponse.buffer()
-
-    await conn.sendMessage(m.chat, {
-      audio: audioBuffer,
-      mimetype: 'audio/mpeg',
-      fileName,
-      caption: `${title}\n${quality}`,
-      quoted: m
-    })
-
-    setTimeout(() => cooldowns.delete(userId), COOLDOWN_TIME)
-  } catch (error) {
-    cooldowns.delete(userId)
-    await m.reply(error.message)
-  }
-}
-
-handler.help = ['play <nombre>']
-handler.tags = ['dl', 'audio']
-handler.command = ['ply', 'pa', 'musica'];
-
-handler2.help = ['ytmp3 <url>']
-handler2.tags = ['dl', 'audio']
-handler2.command = ['ytmp3', 'yta', 'ytaudio']
+handler.command = ["ytmp3"]
+handler.tags = ["descargas"]
+handler.help = ["ytmp3 <url>"]
 
 export default handler
-export { handler2 }
