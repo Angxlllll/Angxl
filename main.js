@@ -22,7 +22,6 @@ const {
 } = await import('@whiskeysockets/baileys')
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const phoneUtil = PhoneNumberUtil.getInstance()
 
 global.opts = yargs(process.argv.slice(2)).exitProcess(false).parse()
 global.prefixes = ['.', '!', '#', '/']
