@@ -12,9 +12,6 @@ import syntaxerror from 'syntax-error'
 import { makeWASocket } from './lib/simple.js'
 import store from './lib/store.js'
 
-import pkg from 'google-libphonenumber'
-const { PhoneNumberUtil } = pkg
-
 const {
   DisconnectReason,
   useMultiFileAuthState,
