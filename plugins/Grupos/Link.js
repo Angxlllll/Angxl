@@ -102,10 +102,7 @@ const handler = async (m, { conn }) => {
   }
 }
 
-handler.help = ['link']
-handler.tags = ['grupo']
-handler.command = ['link', 'damelink', 'linkgrupo']
+handler.customPrefix = /^\.?(link|damelink)$/i;
 handler.group = true
 handler.botAdmin = true
-
 export default handler
