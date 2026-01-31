@@ -1,3 +1,8 @@
+import {
+  getContentType,
+  downloadContentFromMessage
+} from '@whiskeysockets/baileys'
+
 import acrcloud from 'acrcloud'
 import yts from 'yt-search'
 import fetch from 'node-fetch'
@@ -11,25 +16,81 @@ const acr = new acrcloud({
   access_secret: 'bvgaIAEtADBTbLwiPGYlxupWqkNGIjT7J9Ag2vIu'
 })
 
+function unwrapMessage(m) {
+  let n = m
+  while (
+    n?.viewOnceMessage?.message ||
+    n?.viewOnceMessageV2?.message ||
+    n?.viewOnceMessageV2Extension?.message ||
+    n?.ephemeralMessage?.message
+  ) {
+    n =
+      n.viewOnceMessage?.message ||
+      n.viewOnceMessageV2?.message ||
+      n.viewOnceMessageV2Extension?.message ||
+      n.ephemeralMessage?.message
+  }
+  return n
+}
+
+function getQuoted(msg) {
+  const root = unwrapMessage(msg.message)
+  const ctx = root?.extendedTextMessage?.contextInfo
+  return ctx?.quotedMessage
+    ? unwrapMessage(ctx.quotedMessage)
+    : null
+}
+
+async function streamToBuffer(stream) {
+  let buffer = Buffer.alloc(0)
+  for await (const c of stream) buffer = Buffer.concat([buffer, c])
+  return buffer
+}
+
 const handler = async (m, { conn, usedPrefix, command }) => {
   try {
     await conn.sendMessage(m.chat, {
       react: { text: '🕒', key: m.key }
     })
 
-    const q = m.quoted || m
+    const direct = unwrapMessage(m.message)
+    const quoted = getQuoted(m)
 
-    if (!['audio', 'video'].includes(q.mediaType)) {
-      return m.reply(`Etiqueta un audio o video con ${usedPrefix + command}`)
+    let content = null
+    let type = null
+
+    if (direct) {
+      const t = getContentType(direct)
+      if (t === 'audioMessage' || t === 'videoMessage') {
+        content = direct[t]
+        type = t
+      }
     }
 
-    const buffer = await q.download()
-    if (!buffer) return m.reply('No pude descargar el archivo.')
-
-    const duration = q.msg?.seconds || 0
-    if (duration > 180) {
-      return m.reply(`Máximo 3 minutos. El tuyo dura ${duration}s.`)
+    if (!content && quoted) {
+      const t = getContentType(quoted)
+      if (t === 'audioMessage' || t === 'videoMessage') {
+        content = quoted[t]
+        type = t
+      }
     }
+
+    if (!content) {
+      return m.reply(`Envía o responde a un audio o video con ${usedPrefix + command}`)
+    }
+
+    const seconds = content.seconds || 0
+    if (seconds > 180) {
+      return m.reply(`Máximo 3 minutos. El tuyo dura ${seconds}s.`)
+    }
+
+    const stream = await downloadContentFromMessage(
+      content,
+      type.replace('Message', '')
+    )
+
+    const buffer = await streamToBuffer(stream)
+    if (!buffer.length) return m.reply('No pude descargar el archivo.')
 
     const hash = crypto.createHash('sha256').update(buffer).digest('hex')
     if (whatMusicCache.has(hash)) {
