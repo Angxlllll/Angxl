@@ -1,17 +1,21 @@
 import fetch from 'node-fetch'
+import { decodeJid } from '../lib/simple.js'
 
 let handler = async (m, { conn }) => {
-  if (!m.text) return
+  if (!m.text || !m.isGroup) return
 
-  // quita el @bot del inicio
-  let text = m.text.replace(/^@\S*/i, '').trim()
+  const botJid = decodeJid(conn.user?.id || conn.user?.jid)
+  const mentioned = m.mentionedJid || []
 
+  if (!mentioned.includes(botJid)) return
+
+  let text = m.text.replace(/@\S+/g, '').trim()
   if (!text) return m.reply('hola si')
 
   const systemPrompt = `
 Eres Angel Bot, un asistente maso menos serio y burlón.
 - Si el mensaje contiene groserías, responde igual de grosero e insultante.
-- Si no contiene groserías, responde amistoso, ingenioso y entretenido.
+- Si no contiene groserías, responde amistoso e ingenioso.
 - Si preguntan quién te creó, responde SOLO: "Por Angel, el mejor UwU".
 `
 
