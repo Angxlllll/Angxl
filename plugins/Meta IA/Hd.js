@@ -1,20 +1,8 @@
-import fs from "fs"
-import path from "path"
-import fetch from "node-fetch"
-import FormData from "form-data"
+import fetch from 'node-fetch'
+import FormData from 'form-data'
 import {
-  downloadContentFromMessage,
-  generateWAMessageFromContent,
-  prepareWAMessageMedia,
-  generateWAMessageContent
-} from "@whiskeysockets/baileys"
-
-global.wa = {
-  downloadContentFromMessage,
-  generateWAMessageFromContent,
-  prepareWAMessageMedia,
-  generateWAMessageContent
-}
+  downloadContentFromMessage
+} from '@whiskeysockets/baileys'
 
 function unwrapMessage(m) {
   let n = m
@@ -33,129 +21,106 @@ function unwrapMessage(m) {
   return n
 }
 
-function ensureWA(wa, conn) {
-  if (wa?.downloadContentFromMessage) return wa
-  if (conn?.wa?.downloadContentFromMessage) return conn.wa
-  if (global.wa?.downloadContentFromMessage) return global.wa
-  return null
+async function streamToBuffer(stream) {
+  let buf = Buffer.alloc(0)
+  for await (const c of stream) buf = Buffer.concat([buf, c])
+  return buf
 }
 
-const handler = async (msg, { conn, command, wa, usedPrefix }) => {
-  const chatId = msg.key.remoteJid
+const handler = async (m, { conn, usedPrefix, command }) => {
+  const chat = m.key.remoteJid
+  const prefix = usedPrefix || '.'
 
-  const pref = usedPrefix || global.prefixes?.[0] || "."
-  const text = msg.message?.conversation || msg.message?.extendedTextMessage?.text || ""
-  const caption = msg.message?.imageMessage?.caption || ""
-  const body = (text || caption || "").toLowerCase()
+  const text =
+    m.message?.conversation ||
+    m.message?.extendedTextMessage?.text ||
+    ''
 
-  if (!body.startsWith(pref + command)) return
+  if (!text.startsWith(prefix + command)) return
 
-  let quoted = null
-  const ctx = msg.message?.extendedTextMessage?.contextInfo
-  const quotedRaw = ctx?.quotedMessage
+  await conn.sendMessage(chat, {
+    react: { text: '🕒', key: m.key }
+  })
 
-  if (quotedRaw) {
-    quoted = unwrapMessage(quotedRaw)
-  } else if (msg.message?.imageMessage) {
-    quoted = msg.message
-  }
+  const root = unwrapMessage(m.message)
+  const ctx = root?.extendedTextMessage?.contextInfo
+  const quoted = ctx?.quotedMessage
+    ? unwrapMessage(ctx.quotedMessage)
+    : null
 
-  const mime =
-    quoted?.imageMessage?.mimetype ||
-    quoted?.mimetype ||
-    msg.message?.imageMessage?.mimetype ||
-    ""
+  const imageMsg =
+    quoted?.imageMessage ||
+    root?.imageMessage
 
-  if (!mime || !/image\/(jpe?g|png)/i.test(mime)) {
-    await conn.sendMessage(chatId, { react: { text: "👀", key: msg.key } })
+  if (!imageMsg) {
     return conn.sendMessage(
-      chatId,
+      chat,
       {
-        text: `Envía o responde a una imagen con:\n${pref + command}`,
-        ...global.rcanal
+        text: `Envía o responde a una imagen con:\n${prefix + command}`
       },
-      { quoted: msg }
+      { quoted: m }
     )
   }
 
   try {
-    await conn.sendMessage(chatId, { react: { text: "🕒", key: msg.key } })
+    const stream = await downloadContentFromMessage(imageMsg, 'image')
+    const media = await streamToBuffer(stream)
 
-    await conn.sendMessage(
-      chatId,
-      {
-        text: "Mejorando la calidad de la imagen... espera un momento 🧪"
-      },
-      { quoted: msg }
-    )
-
-    const WA = ensureWA(wa, conn)
-    if (!WA) {
-      await conn.sendMessage(chatId, { react: { text: "❌", key: msg.key } })
-      return conn.sendMessage(
-        chatId,
-        { text: "Error interno: no se encontró el módulo de descarga." },
-        { quoted: msg }
-      )
-    }
-
-    const stream = await WA.downloadContentFromMessage(quoted.imageMessage, "image")
-    const buffer = []
-    for await (const chunk of stream) buffer.push(chunk)
-    const media = Buffer.concat(buffer)
-
-    const ext = mime.split("/")[1]
-    const filename = `image_${Date.now()}.${ext}`
+    const mime = imageMsg.mimetype || 'image/jpeg'
+    const ext = mime.split('/')[1] || 'jpg'
 
     const form = new FormData()
-    form.append("image", media, { filename, contentType: mime })
-    form.append("scale", "2")
-
-    const headers = {
-      ...form.getHeaders(),
-      accept: "application/json",
-      "x-client-version": "web",
-      "x-locale": "es"
-    }
-
-    const res = await fetch("https://api2.pixelcut.app/image/upscale/v1", {
-      method: "POST",
-      headers,
-      body: form
+    form.append('image', media, {
+      filename: `image.${ext}`,
+      contentType: mime
     })
+    form.append('scale', '2')
 
-    const json = await res.json()
-
-    if (!json?.result_url || !json.result_url.startsWith("http")) {
-      throw new Error("No se pudo obtener la imagen mejorada desde Pixelcut.")
-    }
-
-    const resultBuffer = await (await fetch(json.result_url)).buffer()
-
-    await conn.sendMessage(
-      chatId,
+    const res = await fetch(
+      'https://api2.pixelcut.app/image/upscale/v1',
       {
-        image: resultBuffer,
-        caption: ""
-      },
-      { quoted: msg }
+        method: 'POST',
+        headers: {
+          ...form.getHeaders(),
+          accept: 'application/json'
+        },
+        body: form
+      }
     )
 
-    await conn.sendMessage(chatId, { react: { text: "✅", key: msg.key } })
-  } catch (err) {
-    await conn.sendMessage(chatId, { react: { text: "❌", key: msg.key } })
+    const json = await res.json()
+    if (!json?.result_url) {
+      throw new Error('Respuesta inválida de Pixelcut')
+    }
+
+    const result = await fetch(json.result_url)
+    const buffer = Buffer.from(await result.arrayBuffer())
+
     await conn.sendMessage(
-      chatId,
-      {
-        text: `Falló la mejora de imagen:\n${err.message}`
-      },
-      { quoted: msg }
+      chat,
+      { image: buffer },
+      { quoted: m }
+    )
+
+    await conn.sendMessage(chat, {
+      react: { text: '✅', key: m.key }
+    })
+
+  } catch (e) {
+    await conn.sendMessage(chat, {
+      react: { text: '❌', key: m.key }
+    })
+
+    await conn.sendMessage(
+      chat,
+      { text: `Falló la mejora:\n${e.message}` },
+      { quoted: m }
     )
   }
 }
 
-handler.help = ["𝖧𝖽"]
-handler.tags = ["𝖬𝖤𝖳𝖠 𝖨𝖠"]
-handler.command = ["hd"]
+handler.help = ['hd']
+handler.tags = ['ia']
+handler.command = ['hd']
 
 export default handler
