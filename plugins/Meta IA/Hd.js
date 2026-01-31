@@ -2,6 +2,19 @@ import fs from "fs"
 import path from "path"
 import fetch from "node-fetch"
 import FormData from "form-data"
+import {
+  downloadContentFromMessage,
+  generateWAMessageFromContent,
+  prepareWAMessageMedia,
+  generateWAMessageContent
+} from "@whiskeysockets/baileys"
+
+global.wa = {
+  downloadContentFromMessage,
+  generateWAMessageFromContent,
+  prepareWAMessageMedia,
+  generateWAMessageContent
+}
 
 function unwrapMessage(m) {
   let n = m
