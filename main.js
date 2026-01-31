@@ -21,6 +21,13 @@ const {
   Browsers
 } = await import('@whiskeysockets/baileys')
 
+global.wa = {
+  downloadContentFromMessage,
+  generateWAMessageFromContent,
+  prepareWAMessageMedia,
+  generateWAMessageContent
+}
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 global.opts = yargs(process.argv.slice(2)).exitProcess(false).parse()
