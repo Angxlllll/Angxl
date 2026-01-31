@@ -13,7 +13,9 @@ const acr = new acrcloud({
 
 const handler = async (m, { conn, usedPrefix, command }) => {
   try {
-    await m.react('🕒')
+      await conn.sendMessage(m.chat, {
+    react: { text: "🕒", key: m.key }
+  })
 
     const q = m.quoted || m
     const mime = (q.msg || q).mimetype || q.mediaType || ''
