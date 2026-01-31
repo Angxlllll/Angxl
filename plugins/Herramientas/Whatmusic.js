@@ -18,15 +18,15 @@ let handler = async (m, { conn, usedPrefix, command }) => {
     const q = m.quoted ? m.quoted : m
     const mime = (q.msg || q).mimetype || q.mediaType || ''
     if (!/audio|video/.test(mime)) {
-      return conn.reply(m.chat, `Etiqueta un audio o video con ${usedPrefix + command}`, m)
+      return m.reply(m.chat, `Etiqueta un audio o video con ${usedPrefix + command}`, m)
     }
 
     const buffer = await q.download?.()
-    if (!buffer) return conn.reply(m.chat, 'No pude descargar el archivo.', m)
+    if (!buffer) return m.reply(m.chat, 'No pude descargar el archivo.', m)
 
     const duration = q.seconds || 0
     if (duration > 240) {
-      return conn.reply(m.chat, `El archivo solo puede durar 3 minutos máximo. El tuyo dura ${duration}s.`, m)
+      return m.reply(m.chat, `El archivo solo puede durar 3 minutos máximo. El tuyo dura ${duration}s.`, m)
     }
 
     const hash = crypto.createHash('sha256').update(buffer).digest('hex')
@@ -40,15 +40,15 @@ let handler = async (m, { conn, usedPrefix, command }) => {
     try {
       result = await acr.identify(buffer)
     } catch {
-      return conn.reply(m.chat, `Error con ACRCloud.`, m)
+      return m.reply(m.chat, `Error con ACRCloud.`, m)
     }
 
     if (!result?.status || result.status.code !== 0)
-      return conn.reply(m.chat, `${result?.status?.msg || 'Error desconocido.'}`, m)
+      return m.reply(m.chat, `${result?.status?.msg || 'Error desconocido.'}`, m)
 
     const music = result.metadata.music?.[0]
     if (!music)
-      return conn.reply(m.chat, 'No se pudo identificar la música.', m)
+      return m.reply(m.chat, 'No se pudo identificar la música.', m)
 
     const { title, artists, album, genres, release_date } = music
     const artistName = artists?.[0]?.name || ''
@@ -103,7 +103,7 @@ let handler = async (m, { conn, usedPrefix, command }) => {
     return conn.sendMessage(m.chat, msg, { quoted: m })
 
   } catch (err) {
-    return conn.reply(m.chat, `Error: ${err.message}`, m)
+    return m.reply(m.chat, `Error: ${err.message}`, m)
   }
 }
 
