@@ -50,28 +50,6 @@ async function downloadToFile(url, filePath) {
   await streamPipe(res.data, fs.createWriteStream(filePath))
 }
 
-async function callYoutubeResolve(videoUrl) {
-  const r = await axios.post(
-    `${API_BASE}/youtube/resolve`,
-    {
-      url: videoUrl,
-      type: "video"
-    },
-    {
-      headers: { apikey: API_KEY },
-      validateStatus: () => true
-    }
-  )
-
-  const data = r.data
-  if (!data?.result?.media) throw new Error("Safe method resolve failed")
-
-  let dl = data.result.media.dl_download || ""
-  if (dl.startsWith("/")) dl = API_BASE + dl
-
-  return dl || data.result.media.direct
-}
-
 async function sendFast(conn, msg, video, caption) {
   const res = await axios.get(`${API_BASE}/ytdl`, {
     params: {
@@ -87,7 +65,7 @@ async function sendFast(conn, msg, video, caption) {
   })
 
   if (!res?.data?.status || !res.data.result?.url)
-    throw new Error("Fast method failed")
+    throw new Error("Fast failed")
 
   await conn.sendMessage(msg.chat, {
     video: { url: res.data.result.url },
@@ -97,16 +75,32 @@ async function sendFast(conn, msg, video, caption) {
 }
 
 async function sendSafe(conn, msg, video, caption) {
-  const videoUrl = await callYoutubeResolve(video.url)
+  const res = await axios.get(`${API_BASE}/ytdl`, {
+    params: {
+      url: video.url,
+      type: "mp4",
+      apikey: API_KEY
+    },
+    headers: {
+      "User-Agent": "Mozilla/5.0",
+      "Accept": "application/json"
+    },
+    timeout: 20000
+  })
+
+  if (!res?.data?.status || !res.data.result?.url)
+    throw new Error("Safe failed")
+
+  const dl = res.data.result.url
 
   const tmp = ensureTmp()
   const filePath = path.join(tmp, `${Date.now()}.mp4`)
 
-  await downloadToFile(videoUrl, filePath)
+  await downloadToFile(dl, filePath)
 
   if (fileSizeMB(filePath) > MAX_MB) {
     fs.unlinkSync(filePath)
-    throw new Error("El video es demasiado pesado")
+    throw new Error("Video demasiado grande")
   }
 
   try {
@@ -138,7 +132,7 @@ const handler = async (msg, { conn, args, usedPrefix, command }) => {
   }
 
   await conn.sendMessage(msg.chat, {
-    react: { text: "🎬", key: msg.key }
+    react: { text: "💻", key: msg.key }
   })
 
   let finished = false
