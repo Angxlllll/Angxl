@@ -13,6 +13,7 @@ const API_BASE = (global.APIs?.may || "").replace(/\/+$/, "")
 const API_KEY  = global.APIKeys?.may || ""
 
 const MAX_MB = 200
+const TIMEOUT_MS = 60000
 
 function ensureTmp() {
   const tmp = path.join(process.cwd(), "tmp")
@@ -34,7 +35,9 @@ function fileSizeMB(filePath) {
 
 async function downloadToFile(url, filePath) {
   const headers = { Accept: "*/*" }
-  if (new URL(url).host === new URL(API_BASE).host) headers.apikey = API_KEY
+  try {
+    if (new URL(url).host === new URL(API_BASE).host) headers.apikey = API_KEY
+  } catch {}
 
   const res = await axios.get(url, {
     responseType: "stream",
@@ -47,9 +50,28 @@ async function downloadToFile(url, filePath) {
   await streamPipe(res.data, fs.createWriteStream(filePath))
 }
 
-/* =========================
-   MÉTODO A — RÁPIDO (URL)
-   ========================= */
+async function callYoutubeResolve(videoUrl) {
+  const r = await axios.post(
+    `${API_BASE}/youtube/resolve`,
+    {
+      url: videoUrl,
+      type: "video"
+    },
+    {
+      headers: { apikey: API_KEY },
+      validateStatus: () => true
+    }
+  )
+
+  const data = r.data
+  if (!data?.result?.media) throw new Error("Safe method resolve failed")
+
+  let dl = data.result.media.dl_download || ""
+  if (dl.startsWith("/")) dl = API_BASE + dl
+
+  return dl || data.result.media.direct
+}
+
 async function sendFast(conn, msg, video, caption) {
   const res = await axios.get(`${API_BASE}/ytdl`, {
     params: {
@@ -74,31 +96,17 @@ async function sendFast(conn, msg, video, caption) {
   }, { quoted: msg })
 }
 
-/* =========================
-   MÉTODO B — SEGURO (TMP)
-   ========================= */
 async function sendSafe(conn, msg, video, caption) {
-  const r = await axios.post(
-    `${API_BASE}/youtube/resolve`,
-    { url: video.url, type: "video" },
-    { headers: { apikey: API_KEY }, validateStatus: () => true }
-  )
-
-  const media = r.data?.result?.media
-  if (!media) throw new Error("Safe method resolve failed")
-
-  let dl = media.dl_download || media.direct
-  if (dl?.startsWith("/")) dl = API_BASE + dl
-  if (!dl) throw new Error("Safe method no link")
+  const videoUrl = await callYoutubeResolve(video.url)
 
   const tmp = ensureTmp()
   const filePath = path.join(tmp, `${Date.now()}.mp4`)
 
-  await downloadToFile(dl, filePath)
+  await downloadToFile(videoUrl, filePath)
 
   if (fileSizeMB(filePath) > MAX_MB) {
     fs.unlinkSync(filePath)
-    throw new Error("Video demasiado grande")
+    throw new Error("El video es demasiado pesado")
   }
 
   try {
@@ -120,9 +128,6 @@ async function sendSafe(conn, msg, video, caption) {
   fs.unlinkSync(filePath)
 }
 
-/* =========================
-   HANDLER
-   ========================= */
 const handler = async (msg, { conn, args, usedPrefix, command }) => {
   const query = args.join(" ").trim()
 
@@ -132,24 +137,42 @@ const handler = async (msg, { conn, args, usedPrefix, command }) => {
     }, { quoted: msg })
   }
 
-  try {
-    const search = await yts(query)
-    const video = search.videos?.[0]
-    if (!video) throw new Error("Sin resultados")
+  await conn.sendMessage(msg.chat, {
+    react: { text: "💻", key: msg.key }
+  })
 
-    const caption = `
+  let finished = false
+
+  const timeoutPromise = new Promise((_, reject) => {
+    setTimeout(() => {
+      if (!finished) reject(new Error("Tiempo de espera agotado"))
+    }, TIMEOUT_MS)
+  })
+
+  try {
+    await Promise.race([
+      (async () => {
+        const search = await yts(query)
+        const video = search.videos?.[0]
+        if (!video) throw new Error("Sin resultados")
+
+        const caption = `
 🎬 *${video.title}*
 🎥 ${video.author?.name || "—"}
 ⏱ ${video.timestamp}
 `.trim()
 
-    try {
-      await sendFast(conn, msg, video, caption)
-      return
-    } catch {}
+        try {
+          await sendFast(conn, msg, video, caption)
+          finished = true
+          return
+        } catch {}
 
-    await sendSafe(conn, msg, video, caption)
-
+        await sendSafe(conn, msg, video, caption)
+        finished = true
+      })(),
+      timeoutPromise
+    ])
   } catch (err) {
     await conn.sendMessage(msg.chat, {
       text: `❌ Error: ${err?.message || "Fallo interno"}`
