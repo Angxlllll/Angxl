@@ -12,7 +12,7 @@ const streamPipe = promisify(pipeline)
 const API_BASE = (global.APIs?.may || "").replace(/\/+$/, "")
 const API_KEY = global.APIKeys?.may || ""
 
-const MAX_MB = 200
+const MAX_MB = 300
 const TIMEOUT_MS = 60000
 
 function ensureTmp() {
