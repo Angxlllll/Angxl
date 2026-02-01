@@ -1,8 +1,47 @@
+"use strict"
+
 import axios from "axios"
 import yts from "yt-search"
+import fs from "fs"
+import path from "path"
+import { pipeline } from "stream"
+import { promisify } from "util"
+
+const streamPipe = promisify(pipeline)
 
 const API_BASE = (global.APIs?.may || "").replace(/\/+$/, "")
 const API_KEY  = global.APIKeys?.may || ""
+
+const MAX_MB = 200
+
+function ensureTmp() {
+  const tmp = path.join(process.cwd(), "tmp")
+  if (!fs.existsSync(tmp)) fs.mkdirSync(tmp, { recursive: true })
+  return tmp
+}
+
+function safeName(name = "video") {
+  return String(name)
+    .slice(0, 80)
+    .replace(/[^\w.\- ]+/g, "_")
+    .replace(/\s+/g, " ")
+    .trim() || "video"
+}
+
+function fileSizeMB(filePath) {
+  return fs.statSync(filePath).size / (1024 * 1024)
+}
+
+async function downloadToFile(url, filePath) {
+  const res = await axios.get(url, {
+    responseType: "stream",
+    timeout: 180000,
+    validateStatus: () => true
+  })
+
+  if (res.status >= 400) throw new Error(`HTTP_${res.status}`)
+  await streamPipe(res.data, fs.createWriteStream(filePath))
+}
 
 const handler = async (msg, { conn, args, usedPrefix, command }) => {
 
@@ -19,7 +58,6 @@ const handler = async (msg, { conn, args, usedPrefix, command }) => {
   })
 
   try {
-
     const search = await yts(query)
     if (!search?.videos?.length)
       throw new Error("No se encontraron resultados")
@@ -29,15 +67,21 @@ const handler = async (msg, { conn, args, usedPrefix, command }) => {
     const title     = video.title
     const author    = video.author?.name || "Desconocido"
     const duration  = video.timestamp || "Desconocida"
+    const thumb     = video.thumbnail
     const videoLink = video.url
 
     const caption = `
-⭒ ִֶָ७ ꯭🎬˙⋆｡ - *𝚃𝚒́𝚝𝚞𝚕𝚘:* ${title}
-⭒ ִֶָ७ ꯭🎤˙⋆｡ - *𝙰𝚞𝚝𝚘𝚛:* ${author}
-⭒ ִֶָ७ ꯭🕑˙⋆｡ - *𝙳𝚞𝚛𝚊𝚌𝚒ó𝚗:* ${duration}
+⭒ 🎬 *Título:* ${title}
+⭒ 🎤 *Autor:* ${author}
+⭒ 🕑 *Duración:* ${duration}
 
-» 𝘌𝘕𝘝𝘐𝘈𝘕𝘋𝘖 𝘝𝘐́𝘋𝘌𝘖 🎥
+» Enviando video 🎥
 `.trim()
+
+    await conn.sendMessage(chatId, {
+      image: { url: thumb },
+      caption
+    }, { quoted: msg })
 
     const res = await axios.get(`${API_BASE}/ytdl`, {
       params: {
@@ -52,16 +96,38 @@ const handler = async (msg, { conn, args, usedPrefix, command }) => {
       timeout: 20000
     })
 
-    if (!res?.data?.status || !res.data.result?.url)
-      throw new Error("La API no devolvió el video")
+    const media =
+      res.data?.result?.media ||
+      res.data?.result ||
+      {}
 
-    const videoUrl = res.data.result.url
+    const videoUrl =
+      media.dl_download ||
+      media.direct ||
+      res.data?.result?.url ||
+      res.data?.result?.direct ||
+      res.data?.result?.dl
+
+    if (!videoUrl)
+      throw new Error("No se pudo obtener el video")
+
+    const tmp = ensureTmp()
+    const filePath = path.join(tmp, `${Date.now()}.mp4`)
+
+    await downloadToFile(videoUrl, filePath)
+
+    if (fileSizeMB(filePath) > MAX_MB) {
+      fs.unlinkSync(filePath)
+      throw new Error("El archivo es demasiado grande")
+    }
 
     await conn.sendMessage(chatId, {
-      video: { url: videoUrl },
-      caption,
-      mimetype: "video/mp4"
+      video: fs.readFileSync(filePath),
+      mimetype: "video/mp4",
+      fileName: `${safeName(title)}.mp4`
     }, { quoted: msg })
+
+    fs.unlinkSync(filePath)
 
     await conn.sendMessage(chatId, {
       react: { text: "✅", key: msg.key }
