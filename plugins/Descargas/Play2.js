@@ -12,7 +12,6 @@ const streamPipe = promisify(pipeline)
 const API_BASE = (process.env.API_BASE || "https://api-sky.ultraplus.click").replace(/\/+$/, "")
 const API_KEY  = process.env.API_KEY || "Russellxz"
 
-const VIDEO_QUALITY = "360"
 const MAX_MB = 200
 
 function ensureTmp() {
@@ -47,42 +46,59 @@ async function downloadToFile(url, filePath) {
 async function resolveVideo(videoUrl) {
   const r = await axios.post(
     `${API_BASE}/youtube/resolve`,
-    { url: videoUrl, type: "video", quality: VIDEO_QUALITY },
-    { headers: { apikey: API_KEY }, validateStatus: () => true }
+    {
+      url: videoUrl,
+      type: "video",
+      apikey: API_KEY
+    },
+    {
+      headers: {
+        apikey: API_KEY,
+        "Content-Type": "application/json"
+      },
+      validateStatus: () => true
+    }
   )
 
   const media = r.data?.result?.media
   if (!media) throw new Error("API error")
 
-  let dl = media.dl_download || media.direct
-  if (dl?.startsWith("/")) dl = API_BASE + dl
+  let dl =
+    media.dl_download ||
+    media.direct ||
+    r.data?.result?.url ||
+    r.data?.result?.direct ||
+    r.data?.result?.dl
 
+  if (dl?.startsWith("/")) dl = API_BASE + dl
   if (!dl) throw new Error("No se pudo obtener el video")
+
   return dl
 }
 
-const handler = async (m, { conn, args, usedPrefix, command }) => {
+const handler = async (msg, { conn, args, usedPrefix, command }) => {
+
   const query = args.join(" ").trim()
 
-  if (!query)
-    return conn.sendMessage(m.chat, {
+  if (!query) {
+    return conn.sendMessage(msg.chat, {
       text: `✳️ Usa:\n${usedPrefix}${command} <nombre del video>\nEj:\n${usedPrefix}${command} karma police`
-    }, { quoted: m })
+    }, { quoted: msg })
+  }
 
-  await conn.sendMessage(m.chat, {
-    react: { text: "🎬", key: m.key }
+  await conn.sendMessage(msg.chat, {
+    react: { text: "🎬", key: msg.key }
   })
 
   try {
     const search = await yts(query)
     const video = search.videos?.[0]
-    if (!video) throw new Error("Sin resultados")
+    if (!video) throw new Error("No se encontraron resultados")
 
     const caption = `
 🎬 *${video.title}*
 🎥 ${video.author?.name || "—"}
 ⏱ ${video.timestamp}
-📺 ${VIDEO_QUALITY}p
 `.trim()
 
     const videoUrl = await resolveVideo(video.url)
@@ -98,32 +114,32 @@ const handler = async (m, { conn, args, usedPrefix, command }) => {
     }
 
     try {
-      await conn.sendMessage(m.chat, {
+      await conn.sendMessage(msg.chat, {
         video: fs.readFileSync(filePath),
         mimetype: "video/mp4",
-        fileName: `${safeName(video.title)}_${VIDEO_QUALITY}p.mp4`,
+        fileName: `${safeName(video.title)}.mp4`,
         caption
-      }, { quoted: m })
+      }, { quoted: msg })
     } catch {
-      await conn.sendMessage(m.chat, {
+      await conn.sendMessage(msg.chat, {
         document: fs.readFileSync(filePath),
         mimetype: "video/mp4",
-        fileName: `${safeName(video.title)}_${VIDEO_QUALITY}p.mp4`,
+        fileName: `${safeName(video.title)}.mp4`,
         caption
-      }, { quoted: m })
+      }, { quoted: msg })
     }
 
     fs.unlinkSync(filePath)
 
   } catch (err) {
-    await conn.sendMessage(m.chat, {
+    await conn.sendMessage(msg.chat, {
       text: `❌ Error: ${err?.message || "Fallo interno"}`
-    }, { quoted: m })
+    }, { quoted: msg })
   }
 }
 
 handler.command = ["play2"]
-handler.help = ["play2 <texto>"]
-handler.tags = ["descargas"]
+handler.help    = ["play2 <texto>"]
+handler.tags    = ["descargas"]
 
 export default handler
