@@ -105,18 +105,11 @@ async function sendSafe(conn, msg, video, caption) {
 
   try {
     await conn.sendMessage(msg.chat, {
-      video: fs.readFileSync(filePath),
-      mimetype: "video/mp4",
-      fileName: `${safeName(video.title)}.mp4`,
-      caption
-    }, { quoted: msg })
-  } catch {
-    await conn.sendMessage(msg.chat, {
-      document: fs.readFileSync(filePath),
-      mimetype: "video/mp4",
-      fileName: `${safeName(video.title)}.mp4`,
-      caption
-    }, { quoted: msg })
+  document: fs.readFileSync(filePath),
+  mimetype: "video/mp4",
+  fileName: `${safeName(video.title)}.mp4`,
+  caption
+}, { quoted: msg })
   }
 
   fs.unlinkSync(filePath)
