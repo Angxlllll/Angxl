@@ -139,9 +139,9 @@ const handler = async (msg, { conn, args, usedPrefix, command }) => {
     )
   }
 
-await conn.sendMessage(m.chat, {
-  react: { text: "🎬", key: m.key }
-})
+  await conn.sendMessage(msg.chat, {
+    react: { text: "🎬", key: msg.key }
+  })
 
   let finished = false
 
