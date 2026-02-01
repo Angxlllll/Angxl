@@ -1,8 +1,5 @@
 import axios from "axios"
 
-/* =======================
-   FUNCIÓN YTSYL (API)
-======================= */
 async function ytsyl(url, type = "audio", quality) {
   if (!url) throw new Error("URL requerida")
 
@@ -37,9 +34,6 @@ async function ytsyl(url, type = "audio", quality) {
   }
 }
 
-/* =======================
-   HANDLER (TU CORE)
-======================= */
 const handler = async (m, { conn, args, command }) => {
   const url = args[0]
 
