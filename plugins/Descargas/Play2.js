@@ -9,10 +9,16 @@ import { promisify } from "util"
 
 const streamPipe = promisify(pipeline)
 
-const API_BASE = (process.env.API_BASE || "https://api-sky.ultraplus.click").replace(/\/+$/, "")
-const API_KEY  = process.env.API_KEY || "Russellxz"
+const API_BASE = (global.APIs?.may || "").replace(/\/+$/, "")
+const API_KEY  = global.APIKeys?.may || ""
 
 const MAX_MB = 200
+
+function ensureTmp() {
+  const tmp = path.join(process.cwd(), "tmp")
+  if (!fs.existsSync(tmp)) fs.mkdirSync(tmp, { recursive: true })
+  return tmp
+}
 
 function safeName(name = "video") {
   return String(name)
@@ -20,12 +26,6 @@ function safeName(name = "video") {
     .replace(/[^\w.\- ]+/g, "_")
     .replace(/\s+/g, " ")
     .trim() || "video"
-}
-
-function ensureTmp() {
-  const tmp = path.join(process.cwd(), "tmp")
-  if (!fs.existsSync(tmp)) fs.mkdirSync(tmp, { recursive: true })
-  return tmp
 }
 
 function fileSizeMB(filePath) {
@@ -47,30 +47,24 @@ async function downloadToFile(url, filePath) {
   await streamPipe(res.data, fs.createWriteStream(filePath))
 }
 
-async function callYoutubeResolve(videoUrl) {
+async function resolveVideo(videoUrl) {
   const r = await axios.post(
     `${API_BASE}/youtube/resolve`,
-    {
-      url: videoUrl,
-      type: "video"
-    },
-    {
-      headers: { apikey: API_KEY },
-      validateStatus: () => true
-    }
+    { url: videoUrl, type: "video" },
+    { headers: { apikey: API_KEY }, validateStatus: () => true }
   )
 
-  const data = r.data
-  if (!data?.result?.media) throw new Error("API error")
+  const media = r.data?.result?.media
+  if (!media) throw new Error("API error")
 
-  let dl = data.result.media.dl_download || ""
-  if (dl.startsWith("/")) dl = API_BASE + dl
+  let dl = media.dl_download || media.direct
+  if (dl?.startsWith("/")) dl = API_BASE + dl
+  if (!dl) throw new Error("No video")
 
-  return dl || data.result.media.direct
+  return dl
 }
 
 const handler = async (msg, { conn, args, usedPrefix, command }) => {
-
   const query = args.join(" ").trim()
 
   if (!query) {
@@ -78,10 +72,6 @@ const handler = async (msg, { conn, args, usedPrefix, command }) => {
       text: `✳️ Usa:\n${usedPrefix}${command} <nombre del video>`
     }, { quoted: msg })
   }
-
-  await conn.sendMessage(msg.chat, {
-    react: { text: "🎬", key: msg.key }
-  })
 
   try {
     const search = await yts(query)
@@ -94,35 +84,62 @@ const handler = async (msg, { conn, args, usedPrefix, command }) => {
 ⏱ ${video.timestamp}
 `.trim()
 
-    const videoUrl = await callYoutubeResolve(video.url)
+    const videoUrl = await resolveVideo(video.url)
 
-    const tmp = ensureTmp()
-    const filePath = path.join(tmp, `${Date.now()}.mp4`)
+    const tmpDir = ensureTmp()
+    const filePath = path.join(tmpDir, `${Date.now()}.mp4`)
+    let tmpFinished = false
+    let tmpFailed = false
+    let usedDirect = false
 
-    await downloadToFile(videoUrl, filePath)
-
-    if (fileSizeMB(filePath) > MAX_MB) {
-      fs.unlinkSync(filePath)
-      throw new Error("El video es demasiado pesado")
-    }
+    const tmpPromise = (async () => {
+      try {
+        await downloadToFile(videoUrl, filePath)
+        tmpFinished = true
+      } catch {
+        tmpFailed = true
+      }
+    })()
 
     try {
       await conn.sendMessage(msg.chat, {
-        video: fs.readFileSync(filePath),
+        video: { url: videoUrl },
         mimetype: "video/mp4",
-        fileName: `${safeName(video.title)}.mp4`,
         caption
       }, { quoted: msg })
-    } catch {
-      await conn.sendMessage(msg.chat, {
-        document: fs.readFileSync(filePath),
-        mimetype: "video/mp4",
-        fileName: `${safeName(video.title)}.mp4`,
-        caption
-      }, { quoted: msg })
+      usedDirect = true
+    } catch {}
+
+    if (!usedDirect) {
+      await tmpPromise
+
+      if (tmpFailed || !fs.existsSync(filePath))
+        throw new Error("No se pudo descargar el video")
+
+      if (fileSizeMB(filePath) > MAX_MB) {
+        fs.unlinkSync(filePath)
+        throw new Error("Video demasiado grande")
+      }
+
+      try {
+        await conn.sendMessage(msg.chat, {
+          video: fs.readFileSync(filePath),
+          mimetype: "video/mp4",
+          fileName: `${safeName(video.title)}.mp4`,
+          caption
+        }, { quoted: msg })
+      } catch {
+        await conn.sendMessage(msg.chat, {
+          document: fs.readFileSync(filePath),
+          mimetype: "video/mp4",
+          fileName: `${safeName(video.title)}.mp4`,
+          caption
+        }, { quoted: msg })
+      }
     }
 
-    fs.unlinkSync(filePath)
+    await tmpPromise
+    if (fs.existsSync(filePath)) fs.unlinkSync(filePath)
 
   } catch (err) {
     await conn.sendMessage(msg.chat, {
