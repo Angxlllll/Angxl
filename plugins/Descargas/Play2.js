@@ -9,8 +9,11 @@ import { promisify } from "util"
 
 const streamPipe = promisify(pipeline)
 
-const API_BASE = (global.APIs?.may || "").replace(/\/+$/, "")
-const API_KEY = global.APIKeys?.may || ""
+const API_BASE_GLOBAL = (global.APIs?.may || "").replace(/\/+$/, "")
+const API_KEY_GLOBAL = global.APIKeys?.may || ""
+
+const API_BASE_ENV = (process.env.API_BASE || "https://api-sky.ultraplus.click").replace(/\/+$/, "")
+const API_KEY_ENV = process.env.API_KEY || "Russellxz"
 
 const MAX_MB = 200
 const TIMEOUT_MS = 60000
@@ -30,14 +33,9 @@ function safeName(name = "video") {
 }
 
 async function downloadToFile(url, filePath) {
-  const headers = { Accept: "*/*" }
-  try {
-    if (new URL(url).host === new URL(API_BASE).host) headers.apikey = API_KEY
-  } catch {}
   const res = await axios.get(url, {
     responseType: "stream",
     timeout: 180000,
-    headers,
     validateStatus: () => true
   })
   if (res.status >= 400) throw new Error(`HTTP_${res.status}`)
@@ -45,8 +43,12 @@ async function downloadToFile(url, filePath) {
 }
 
 async function sendFast(conn, msg, video, caption) {
-  const res = await axios.get(`${API_BASE}/ytdl`, {
-    params: { url: video.url, type: "mp4", apikey: API_KEY },
+  const res = await axios.get(`${API_BASE_GLOBAL}/ytdl`, {
+    params: {
+      url: video.url,
+      type: "mp4",
+      apikey: API_KEY_GLOBAL
+    },
     timeout: 20000
   })
   if (!res?.data?.status || !res.data.result?.url) throw new Error("Fast failed")
@@ -62,8 +64,12 @@ async function sendFast(conn, msg, video, caption) {
 }
 
 async function sendSafe(conn, msg, video, caption) {
-  const res = await axios.get(`${API_BASE}/ytdl`, {
-    params: { url: video.url, type: "mp4", apikey: API_KEY },
+  const res = await axios.get(`${API_BASE_ENV}/ytdl`, {
+    params: {
+      url: video.url,
+      type: "mp4",
+      apikey: API_KEY_ENV
+    },
     timeout: 20000
   })
   if (!res?.data?.status || !res.data.result?.url) throw new Error("Safe failed")
