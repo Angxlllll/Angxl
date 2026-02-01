@@ -12,7 +12,7 @@ const streamPipe = promisify(pipeline)
 const API_BASE = (global.APIs?.may || "").replace(/\/+$/, "")
 const API_KEY = global.APIKeys?.may || ""
 
-const MAX_MB = 300
+const MAX_MB = 200
 const TIMEOUT_MS = 60000
 
 function ensureTmp() {
@@ -27,10 +27,6 @@ function safeName(name = "video") {
     .replace(/[^\w.\- ]+/g, "_")
     .replace(/\s+/g, " ")
     .trim() || "video"
-}
-
-function fileSizeMB(filePath) {
-  return fs.statSync(filePath).size / (1024 * 1024)
 }
 
 async function downloadToFile(url, filePath) {
@@ -50,15 +46,7 @@ async function downloadToFile(url, filePath) {
 
 async function sendFast(conn, msg, video, caption) {
   const res = await axios.get(`${API_BASE}/ytdl`, {
-    params: {
-      url: video.url,
-      type: "mp4",
-      apikey: API_KEY
-    },
-    headers: {
-      "User-Agent": "Mozilla/5.0",
-      "Accept": "application/json"
-    },
+    params: { url: video.url, type: "mp4", apikey: API_KEY },
     timeout: 20000
   })
   if (!res?.data?.status || !res.data.result?.url) throw new Error("Fast failed")
@@ -75,40 +63,38 @@ async function sendFast(conn, msg, video, caption) {
 
 async function sendSafe(conn, msg, video, caption) {
   const res = await axios.get(`${API_BASE}/ytdl`, {
-    params: {
-      url: video.url,
-      type: "mp4",
-      apikey: API_KEY
-    },
-    headers: {
-      "User-Agent": "Mozilla/5.0",
-      "Accept": "application/json"
-    },
+    params: { url: video.url, type: "mp4", apikey: API_KEY },
     timeout: 20000
   })
   if (!res?.data?.status || !res.data.result?.url) throw new Error("Safe failed")
+
   const dl = res.data.result.url
   const tmp = ensureTmp()
   const filePath = path.join(tmp, `${Date.now()}.mp4`)
+
   await downloadToFile(dl, filePath)
+
   const size = fs.statSync(filePath).size
   if (size / 1024 / 1024 > MAX_MB) {
     fs.unlinkSync(filePath)
     throw new Error("Video demasiado grande")
   }
+
   try {
     await conn.sendMessage(
       msg.chat,
       {
-        video: fs.createReadStream(filePath),
+        video: {
+          stream: fs.createReadStream(filePath),
+          length: size
+        },
         mimetype: "video/mp4",
-        fileLength: size,
         caption
       },
       { quoted: msg }
     )
   } finally {
-    if (fs.existsSync(filePath)) fs.unlinkSync(filePath)
+    fs.existsSync(filePath) && fs.unlinkSync(filePath)
   }
 }
 
@@ -121,31 +107,34 @@ const handler = async (msg, { conn, args, usedPrefix, command }) => {
       { quoted: msg }
     )
   }
-  await conn.sendMessage(msg.chat, {
-    react: { text: "💻", key: msg.key }
-  })
+
   let finished = false
+
   const timeoutPromise = new Promise((_, reject) => {
     setTimeout(() => {
       if (!finished) reject(new Error("Tiempo de espera agotado"))
     }, TIMEOUT_MS)
   })
+
   try {
     await Promise.race([
       (async () => {
         const search = await yts(query)
         const video = search.videos?.[0]
         if (!video) throw new Error("Sin resultados")
+
         const caption = `
 🎬 *${video.title}*
 🎥 ${video.author?.name || "—"}
-⏱ ${video.timestamp}
+⏱ ${video.timestamp || "--:--"}
         `.trim()
+
         try {
           await sendFast(conn, msg, video, caption)
           finished = true
           return
         } catch {}
+
         await sendSafe(conn, msg, video, caption)
         finished = true
       })(),
