@@ -1,8 +1,45 @@
 import axios from "axios"
 import yts from "yt-search"
+import fs from "fs"
+import path from "path"
+import { pipeline } from "stream"
+import { promisify } from "util"
+
+const streamPipe = promisify(pipeline)
 
 const API_BASE = (global.APIs?.may || "").replace(/\/+$/, "")
 const API_KEY  = global.APIKeys?.may || ""
+
+const MAX_MB = 200
+
+function ensureTmp() {
+  const tmp = path.join(process.cwd(), "tmp")
+  if (!fs.existsSync(tmp)) fs.mkdirSync(tmp, { recursive: true })
+  return tmp
+}
+
+function fileSizeMB(file) {
+  return fs.statSync(file).size / (1024 * 1024)
+}
+
+function safeName(name = "video") {
+  return String(name)
+    .slice(0, 80)
+    .replace(/[^\w.\- ]+/g, "_")
+    .replace(/\s+/g, " ")
+    .trim() || "video"
+}
+
+async function downloadToFile(url, filePath) {
+  const res = await axios.get(url, {
+    responseType: "stream",
+    timeout: 180000,
+    validateStatus: () => true
+  })
+
+  if (res.status >= 400) throw new Error(`HTTP_${res.status}`)
+  await streamPipe(res.data, fs.createWriteStream(filePath))
+}
 
 const handler = async (msg, { conn, args, usedPrefix, command }) => {
 
@@ -11,7 +48,7 @@ const handler = async (msg, { conn, args, usedPrefix, command }) => {
 
   if (!query) {
     return conn.sendMessage(chatId, {
-      text: `✳️ Usa:\n${usedPrefix}${command} <nombre del video>\nEj:\n${usedPrefix}${command} karma police`
+      text: `✳️ Usa:\n${usedPrefix}${command} <nombre del video>`
     }, { quoted: msg })
   }
 
@@ -63,11 +100,24 @@ const handler = async (msg, { conn, args, usedPrefix, command }) => {
     if (!videoUrl)
       throw new Error("No se pudo obtener el video")
 
+    const tmp = ensureTmp()
+    const filePath = path.join(tmp, `${Date.now()}.mp4`)
+
+    await downloadToFile(videoUrl, filePath)
+
+    if (fileSizeMB(filePath) > MAX_MB) {
+      fs.unlinkSync(filePath)
+      throw new Error("El video es demasiado grande")
+    }
+
     await conn.sendMessage(chatId, {
-      video: { url: videoUrl },
+      video: fs.readFileSync(filePath),
       mimetype: "video/mp4",
+      fileName: `${safeName(title)}.mp4`,
       caption
     }, { quoted: msg })
+
+    fs.unlinkSync(filePath)
 
     await conn.sendMessage(chatId, {
       react: { text: "✅", key: msg.key }
