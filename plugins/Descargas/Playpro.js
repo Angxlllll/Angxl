@@ -103,8 +103,10 @@ async function callYoutubeResolve(videoUrl, { type, quality, format }) {
   }
 }
 
-const handler = async (m, { conn, args }) => {
+const handler = async (m, { conn }) => {
+  const text = m.text?.trim()
   const { query, quality } = splitQueryAndQuality(text)
+
   if (!query) return m.reply("✳️ Usa: .playa <texto> [calidad]")
 
     await conn.sendMessage(m.chat, {
