@@ -107,7 +107,9 @@ const handler = async (m, { conn, text }) => {
   const { query, quality } = splitQueryAndQuality(text)
   if (!query) return m.reply("✳️ Usa: .playa <texto> [calidad]")
 
-  await m.react("⏳")
+    await conn.sendMessage(m.chat, {
+    react: { text: "⏳", key: m.key }
+  })
 
   const res = await yts(query)
   const video = res.videos?.[0]
@@ -142,7 +144,9 @@ Opciones:
     quoted: m
   }
 
-  await m.react("✅")
+    await conn.sendMessage(m.chat, {
+    react: { text: "✅", key: m.key }
+  })
 
   if (conn._playListener) return
   conn._playListener = true
