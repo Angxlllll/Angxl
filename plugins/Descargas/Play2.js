@@ -34,11 +34,7 @@ function fileSizeMB(filePath) {
 
 async function downloadToFile(url, filePath) {
   const headers = { Accept: "*/*" }
-  try {
-    if (new URL(url).host === new URL(API_BASE).host) {
-      headers.apikey = API_KEY
-    }
-  } catch {}
+  if (new URL(url).host === new URL(API_BASE).host) headers.apikey = API_KEY
 
   const res = await axios.get(url, {
     responseType: "stream",
@@ -51,45 +47,83 @@ async function downloadToFile(url, filePath) {
   await streamPipe(res.data, fs.createWriteStream(filePath))
 }
 
-async function callYoutubeResolve(videoUrl) {
+/* =========================
+   MÉTODO A — RÁPIDO (URL)
+   ========================= */
+async function sendFast(conn, msg, video, caption) {
+  const res = await axios.get(`${API_BASE}/ytdl`, {
+    params: {
+      url: video.url,
+      type: "mp4",
+      apikey: API_KEY
+    },
+    headers: {
+      "User-Agent": "Mozilla/5.0",
+      "Accept": "application/json"
+    },
+    timeout: 20000
+  })
+
+  if (!res?.data?.status || !res.data.result?.url)
+    throw new Error("Fast method failed")
+
+  await conn.sendMessage(msg.chat, {
+    video: { url: res.data.result.url },
+    mimetype: "video/mp4",
+    caption
+  }, { quoted: msg })
+}
+
+/* =========================
+   MÉTODO B — SEGURO (TMP)
+   ========================= */
+async function sendSafe(conn, msg, video, caption) {
   const r = await axios.post(
     `${API_BASE}/youtube/resolve`,
-    { url: videoUrl, type: "video" },
+    { url: video.url, type: "video" },
     { headers: { apikey: API_KEY }, validateStatus: () => true }
   )
 
-  const data = r.data || {}
+  const media = r.data?.result?.media
+  if (!media) throw new Error("Safe method resolve failed")
 
-  const media =
-    data?.result?.media ||
-    data?.result ||
-    data
+  let dl = media.dl_download || media.direct
+  if (dl?.startsWith("/")) dl = API_BASE + dl
+  if (!dl) throw new Error("Safe method no link")
 
-  let dl =
-    media?.dl_download ||
-    media?.direct ||
-    media?.url ||
-    data?.url ||
-    null
+  const tmp = ensureTmp()
+  const filePath = path.join(tmp, `${Date.now()}.mp4`)
 
-  if (typeof dl === "string" && dl.startsWith("/")) {
-    dl = API_BASE + dl
+  await downloadToFile(dl, filePath)
+
+  if (fileSizeMB(filePath) > MAX_MB) {
+    fs.unlinkSync(filePath)
+    throw new Error("Video demasiado grande")
   }
 
-  if (!dl) {
-    const msg =
-      data?.message ||
-      data?.error ||
-      data?.result?.message ||
-      "La API no devolvió un link"
-    throw new Error(msg)
+  try {
+    await conn.sendMessage(msg.chat, {
+      video: fs.readFileSync(filePath),
+      mimetype: "video/mp4",
+      fileName: `${safeName(video.title)}.mp4`,
+      caption
+    }, { quoted: msg })
+  } catch {
+    await conn.sendMessage(msg.chat, {
+      document: fs.readFileSync(filePath),
+      mimetype: "video/mp4",
+      fileName: `${safeName(video.title)}.mp4`,
+      caption
+    }, { quoted: msg })
   }
 
-  return dl
+  fs.unlinkSync(filePath)
 }
 
+/* =========================
+   HANDLER
+   ========================= */
 const handler = async (msg, { conn, args, usedPrefix, command }) => {
-
   const query = args.join(" ").trim()
 
   if (!query) {
@@ -109,63 +143,12 @@ const handler = async (msg, { conn, args, usedPrefix, command }) => {
 ⏱ ${video.timestamp}
 `.trim()
 
-    const videoUrl = await callYoutubeResolve(video.url)
-
-    const tmpDir = ensureTmp()
-    const filePath = path.join(tmpDir, `${Date.now()}.mp4`)
-
-    let tmpDone = false
-    let tmpFailed = false
-    let usedDirect = false
-
-    const tmpPromise = (async () => {
-      try {
-        await downloadToFile(videoUrl, filePath)
-        tmpDone = true
-      } catch {
-        tmpFailed = true
-      }
-    })()
-
     try {
-      await conn.sendMessage(msg.chat, {
-        video: { url: videoUrl },
-        mimetype: "video/mp4",
-        caption
-      }, { quoted: msg })
-      usedDirect = true
+      await sendFast(conn, msg, video, caption)
+      return
     } catch {}
 
-    if (!usedDirect) {
-      await tmpPromise
-
-      if (tmpFailed || !fs.existsSync(filePath))
-        throw new Error("No se pudo descargar el video")
-
-      if (fileSizeMB(filePath) > MAX_MB) {
-        fs.unlinkSync(filePath)
-        throw new Error("El video es demasiado grande")
-      }
-
-      try {
-        await conn.sendMessage(msg.chat, {
-          video: fs.readFileSync(filePath),
-          mimetype: "video/mp4",
-          fileName: `${safeName(video.title)}.mp4`,
-          caption
-        }, { quoted: msg })
-      } catch {
-        await conn.sendMessage(msg.chat, {
-          document: fs.readFileSync(filePath),
-          mimetype: "video/mp4",
-          fileName: `${safeName(video.title)}.mp4`,
-          caption
-        }, { quoted: msg })
-      }
-    }
-
-    await tmpPromise
-    if (fs.existsSync(filePath)) fs.unlinkSync(filePath)
+    await sendSafe(conn, msg, video, caption)
 
   } catch (err) {
     await conn.sendMessage(msg.chat, {
