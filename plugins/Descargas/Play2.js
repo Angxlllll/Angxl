@@ -139,6 +139,10 @@ const handler = async (msg, { conn, args, usedPrefix, command }) => {
     )
   }
 
+await conn.sendMessage(m.chat, {
+  react: { text: "🎬", key: m.key }
+})
+
   let finished = false
 
   const timeoutPromise = new Promise((_, reject) => {
