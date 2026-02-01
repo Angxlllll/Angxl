@@ -34,7 +34,11 @@ function fileSizeMB(filePath) {
 
 async function downloadToFile(url, filePath) {
   const headers = { Accept: "*/*" }
-  if (new URL(url).host === new URL(API_BASE).host) headers.apikey = API_KEY
+  try {
+    if (new URL(url).host === new URL(API_BASE).host) {
+      headers.apikey = API_KEY
+    }
+  } catch {}
 
   const res = await axios.get(url, {
     responseType: "stream",
@@ -47,24 +51,45 @@ async function downloadToFile(url, filePath) {
   await streamPipe(res.data, fs.createWriteStream(filePath))
 }
 
-async function resolveVideo(videoUrl) {
+async function callYoutubeResolve(videoUrl) {
   const r = await axios.post(
     `${API_BASE}/youtube/resolve`,
     { url: videoUrl, type: "video" },
     { headers: { apikey: API_KEY }, validateStatus: () => true }
   )
 
-  const media = r.data?.result?.media
-  if (!media) throw new Error("API error")
+  const data = r.data || {}
 
-  let dl = media.dl_download || media.direct
-  if (dl?.startsWith("/")) dl = API_BASE + dl
-  if (!dl) throw new Error("No video")
+  const media =
+    data?.result?.media ||
+    data?.result ||
+    data
+
+  let dl =
+    media?.dl_download ||
+    media?.direct ||
+    media?.url ||
+    data?.url ||
+    null
+
+  if (typeof dl === "string" && dl.startsWith("/")) {
+    dl = API_BASE + dl
+  }
+
+  if (!dl) {
+    const msg =
+      data?.message ||
+      data?.error ||
+      data?.result?.message ||
+      "La API no devolvió un link"
+    throw new Error(msg)
+  }
 
   return dl
 }
 
 const handler = async (msg, { conn, args, usedPrefix, command }) => {
+
   const query = args.join(" ").trim()
 
   if (!query) {
@@ -84,18 +109,19 @@ const handler = async (msg, { conn, args, usedPrefix, command }) => {
 ⏱ ${video.timestamp}
 `.trim()
 
-    const videoUrl = await resolveVideo(video.url)
+    const videoUrl = await callYoutubeResolve(video.url)
 
     const tmpDir = ensureTmp()
     const filePath = path.join(tmpDir, `${Date.now()}.mp4`)
-    let tmpFinished = false
+
+    let tmpDone = false
     let tmpFailed = false
     let usedDirect = false
 
     const tmpPromise = (async () => {
       try {
         await downloadToFile(videoUrl, filePath)
-        tmpFinished = true
+        tmpDone = true
       } catch {
         tmpFailed = true
       }
@@ -118,7 +144,7 @@ const handler = async (msg, { conn, args, usedPrefix, command }) => {
 
       if (fileSizeMB(filePath) > MAX_MB) {
         fs.unlinkSync(filePath)
-        throw new Error("Video demasiado grande")
+        throw new Error("El video es demasiado grande")
       }
 
       try {
