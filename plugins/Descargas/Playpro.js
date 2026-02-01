@@ -115,7 +115,7 @@ const handler = async (m, { conn, text }) => {
 
   const q = VALID_QUALITIES.has(quality) ? quality : DEFAULT_VIDEO_QUALITY
 
-  const caption = `❦ LA SUKI BOT ❦
+  const caption = `
 
 🎬 ${video.title}
 ⏱ ${video.timestamp}
@@ -192,7 +192,7 @@ async function sendVideo(conn, job, doc) {
     [doc ? "document" : "video"]: fs.readFileSync(file),
     mimetype: "video/mp4",
     fileName: `${safeName(job.title)}_${job.quality}p.mp4`,
-    caption: `🎬 ${job.title}\n⚡ ${job.quality}p\n🤖 La Suki Bot`
+    caption: `🎬 ${job.title}\n⚡ ${job.quality}p\n🤖`
   }, { quoted: job.quoted })
 
   fs.unlinkSync(file)
