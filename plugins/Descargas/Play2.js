@@ -10,7 +10,7 @@ import { promisify } from "util"
 const streamPipe = promisify(pipeline)
 
 const API_BASE = (global.APIs?.may || "").replace(/\/+$/, "")
-const API_KEY  = global.APIKeys?.may || ""
+const API_KEY = global.APIKeys?.may || ""
 
 const MAX_MB = 200
 const TIMEOUT_MS = 60000
@@ -38,14 +38,12 @@ async function downloadToFile(url, filePath) {
   try {
     if (new URL(url).host === new URL(API_BASE).host) headers.apikey = API_KEY
   } catch {}
-
   const res = await axios.get(url, {
     responseType: "stream",
     timeout: 180000,
     headers,
     validateStatus: () => true
   })
-
   if (res.status >= 400) throw new Error(`HTTP_${res.status}`)
   await streamPipe(res.data, fs.createWriteStream(filePath))
 }
@@ -63,15 +61,16 @@ async function sendFast(conn, msg, video, caption) {
     },
     timeout: 20000
   })
-
-  if (!res?.data?.status || !res.data.result?.url)
-    throw new Error("Fast failed")
-
-  await conn.sendMessage(msg.chat, {
-    video: { url: res.data.result.url },
-    mimetype: "video/mp4",
-    caption
-  }, { quoted: msg })
+  if (!res?.data?.status || !res.data.result?.url) throw new Error("Fast failed")
+  await conn.sendMessage(
+    msg.chat,
+    {
+      video: { url: res.data.result.url },
+      mimetype: "video/mp4",
+      caption
+    },
+    { quoted: msg }
+  )
 }
 
 async function sendSafe(conn, msg, video, caption) {
@@ -87,29 +86,27 @@ async function sendSafe(conn, msg, video, caption) {
     },
     timeout: 20000
   })
-
-  if (!res?.data?.status || !res.data.result?.url)
-    throw new Error("Safe failed")
-
+  if (!res?.data?.status || !res.data.result?.url) throw new Error("Safe failed")
   const dl = res.data.result.url
-
   const tmp = ensureTmp()
   const filePath = path.join(tmp, `${Date.now()}.mp4`)
-
   await downloadToFile(dl, filePath)
-
-  if (fileSizeMB(filePath) > MAX_MB) {
+  const size = fs.statSync(filePath).size
+  if (size / 1024 / 1024 > MAX_MB) {
     fs.unlinkSync(filePath)
     throw new Error("Video demasiado grande")
   }
-
   try {
-    await conn.sendMessage(msg.chat, {
-      document: fs.readFileSync(filePath),
-      mimetype: "video/mp4",
-      fileName: `${safeName(video.title)}.mp4`,
-      caption
-    }, { quoted: msg })
+    await conn.sendMessage(
+      msg.chat,
+      {
+        video: fs.createReadStream(filePath),
+        mimetype: "video/mp4",
+        fileLength: size,
+        caption
+      },
+      { quoted: msg }
+    )
   } finally {
     if (fs.existsSync(filePath)) fs.unlinkSync(filePath)
   }
@@ -117,58 +114,54 @@ async function sendSafe(conn, msg, video, caption) {
 
 const handler = async (msg, { conn, args, usedPrefix, command }) => {
   const query = args.join(" ").trim()
-
   if (!query) {
-    return conn.sendMessage(msg.chat, {
-      text: `✳️ Usa:\n${usedPrefix}${command} <nombre del video>`
-    }, { quoted: msg })
+    return conn.sendMessage(
+      msg.chat,
+      { text: `✳️ Usa:\n${usedPrefix}${command} <nombre del video>` },
+      { quoted: msg }
+    )
   }
-
   await conn.sendMessage(msg.chat, {
     react: { text: "💻", key: msg.key }
   })
-
   let finished = false
-
   const timeoutPromise = new Promise((_, reject) => {
     setTimeout(() => {
       if (!finished) reject(new Error("Tiempo de espera agotado"))
     }, TIMEOUT_MS)
   })
-
   try {
     await Promise.race([
       (async () => {
         const search = await yts(query)
         const video = search.videos?.[0]
         if (!video) throw new Error("Sin resultados")
-
         const caption = `
 🎬 *${video.title}*
 🎥 ${video.author?.name || "—"}
 ⏱ ${video.timestamp}
-`.trim()
-
+        `.trim()
         try {
           await sendFast(conn, msg, video, caption)
           finished = true
           return
         } catch {}
-
         await sendSafe(conn, msg, video, caption)
         finished = true
       })(),
       timeoutPromise
     ])
   } catch (err) {
-    await conn.sendMessage(msg.chat, {
-      text: `❌ Error: ${err?.message || "Fallo interno"}`
-    }, { quoted: msg })
+    await conn.sendMessage(
+      msg.chat,
+      { text: `❌ Error: ${err?.message || "Fallo interno"}` },
+      { quoted: msg }
+    )
   }
 }
 
 handler.command = ["play2"]
-handler.help    = ["play2 <texto>"]
-handler.tags    = ["descargas"]
+handler.help = ["play2 <texto>"]
+handler.tags = ["descargas"]
 
 export default handler
