@@ -51,7 +51,10 @@ async function sendFast(conn, msg, video, caption) {
     },
     timeout: 20000
   })
-  if (!res?.data?.status || !res.data.result?.url) throw new Error("Fast failed")
+
+  if (!res?.data?.status || !res.data.result?.url)
+    throw new Error("Fast failed")
+
   await conn.sendMessage(
     msg.chat,
     {
@@ -64,17 +67,25 @@ async function sendFast(conn, msg, video, caption) {
 }
 
 async function sendSafe(conn, msg, video, caption) {
-  const res = await axios.get(`${API_BASE_ENV}/ytdl`, {
-    params: {
+  const r = await axios.post(
+    `${API_BASE_ENV}/youtube/resolve`,
+    {
       url: video.url,
-      type: "mp4",
-      apikey: API_KEY_ENV
+      type: "video"
     },
-    timeout: 20000
-  })
-  if (!res?.data?.status || !res.data.result?.url) throw new Error("Safe failed")
+    {
+      headers: { apikey: API_KEY_ENV },
+      validateStatus: () => true
+    }
+  )
 
-  const dl = res.data.result.url
+  const data = r.data
+  if (!data?.result?.media) throw new Error("Safe failed")
+
+  let dl = data.result.media.dl_download || data.result.media.direct
+  if (!dl) throw new Error("No media url")
+  if (dl.startsWith("/")) dl = API_BASE_ENV + dl
+
   const tmp = ensureTmp()
   const filePath = path.join(tmp, `${Date.now()}.mp4`)
 
@@ -106,6 +117,7 @@ async function sendSafe(conn, msg, video, caption) {
 
 const handler = async (msg, { conn, args, usedPrefix, command }) => {
   const query = args.join(" ").trim()
+
   if (!query) {
     return conn.sendMessage(
       msg.chat,
