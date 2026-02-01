@@ -14,12 +14,6 @@ const API_KEY  = process.env.API_KEY || "Russellxz"
 
 const MAX_MB = 200
 
-function ensureTmp() {
-  const tmp = path.join(process.cwd(), "tmp")
-  if (!fs.existsSync(tmp)) fs.mkdirSync(tmp, { recursive: true })
-  return tmp
-}
-
 function safeName(name = "video") {
   return String(name)
     .slice(0, 80)
@@ -28,14 +22,24 @@ function safeName(name = "video") {
     .trim() || "video"
 }
 
+function ensureTmp() {
+  const tmp = path.join(process.cwd(), "tmp")
+  if (!fs.existsSync(tmp)) fs.mkdirSync(tmp, { recursive: true })
+  return tmp
+}
+
 function fileSizeMB(filePath) {
   return fs.statSync(filePath).size / (1024 * 1024)
 }
 
 async function downloadToFile(url, filePath) {
+  const headers = { Accept: "*/*" }
+  if (new URL(url).host === new URL(API_BASE).host) headers.apikey = API_KEY
+
   const res = await axios.get(url, {
     responseType: "stream",
     timeout: 180000,
+    headers,
     validateStatus: () => true
   })
 
@@ -43,37 +47,26 @@ async function downloadToFile(url, filePath) {
   await streamPipe(res.data, fs.createWriteStream(filePath))
 }
 
-async function resolveVideo(videoUrl) {
+async function callYoutubeResolve(videoUrl) {
   const r = await axios.post(
     `${API_BASE}/youtube/resolve`,
     {
       url: videoUrl,
-      type: "video",
-      apikey: API_KEY
+      type: "video"
     },
     {
-      headers: {
-        apikey: API_KEY,
-        "Content-Type": "application/json"
-      },
+      headers: { apikey: API_KEY },
       validateStatus: () => true
     }
   )
 
-  const media = r.data?.result?.media
-  if (!media) throw new Error("API error")
+  const data = r.data
+  if (!data?.result?.media) throw new Error("API error")
 
-  let dl =
-    media.dl_download ||
-    media.direct ||
-    r.data?.result?.url ||
-    r.data?.result?.direct ||
-    r.data?.result?.dl
+  let dl = data.result.media.dl_download || ""
+  if (dl.startsWith("/")) dl = API_BASE + dl
 
-  if (dl?.startsWith("/")) dl = API_BASE + dl
-  if (!dl) throw new Error("No se pudo obtener el video")
-
-  return dl
+  return dl || data.result.media.direct
 }
 
 const handler = async (msg, { conn, args, usedPrefix, command }) => {
@@ -82,7 +75,7 @@ const handler = async (msg, { conn, args, usedPrefix, command }) => {
 
   if (!query) {
     return conn.sendMessage(msg.chat, {
-      text: `✳️ Usa:\n${usedPrefix}${command} <nombre del video>\nEj:\n${usedPrefix}${command} karma police`
+      text: `✳️ Usa:\n${usedPrefix}${command} <nombre del video>`
     }, { quoted: msg })
   }
 
@@ -93,7 +86,7 @@ const handler = async (msg, { conn, args, usedPrefix, command }) => {
   try {
     const search = await yts(query)
     const video = search.videos?.[0]
-    if (!video) throw new Error("No se encontraron resultados")
+    if (!video) throw new Error("Sin resultados")
 
     const caption = `
 🎬 *${video.title}*
@@ -101,7 +94,7 @@ const handler = async (msg, { conn, args, usedPrefix, command }) => {
 ⏱ ${video.timestamp}
 `.trim()
 
-    const videoUrl = await resolveVideo(video.url)
+    const videoUrl = await callYoutubeResolve(video.url)
 
     const tmp = ensureTmp()
     const filePath = path.join(tmp, `${Date.now()}.mp4`)
