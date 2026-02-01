@@ -3,9 +3,7 @@ import axios from "axios"
 async function ytsyl(url, type = "audio", quality) {
   if (!url) throw new Error("URL inválida")
 
-  if (!quality) {
-    quality = type === "audio" ? "128k" : "720p"
-  }
+  quality ||= type === "audio" ? "128k" : "720p"
 
   const endpoint =
     type === "audio"
@@ -15,7 +13,7 @@ async function ytsyl(url, type = "audio", quality) {
   const { data } = await axios.post(
     endpoint,
     { url, quality, mode: "url" },
-    { headers: { "content-type": "application/json" } }
+    { headers: { "content-type": "application/json" }, timeout: 15000 }
   )
 
   if (!data?.dl_url) throw new Error("Descarga fallida")
@@ -25,30 +23,25 @@ async function ytsyl(url, type = "audio", quality) {
     author: data.author,
     duration: data.duration,
     thumbnail: data.thumbnail,
-    quality: data.quality,
     size: data.filesize,
-    url: data.dl_url,
-    type
+    url: data.dl_url
   }
 }
 
-const handler = async (m, { conn, text, command }) => {
-  if (!text)
-    return m.reply(
-      "📌 Uso:\n" +
-      "• *.ytmp3 <link>*\n" +
-      "• *.ytmp4 <link>*"
-    )
+const handler = async (m, { conn, args, command }) => {
+  const url = args[0]
 
-  await m.react("🕓")
+  if (!url)
+    return m.reply(
+      "Uso:\n" +
+      "• .ytmp3 <link>\n" +
+      "• .ytmp4 <link>"
+    )
 
   try {
-    const isVideo = ["ytmp4", "mp4"].includes(command)
+    const isVideo = command === "ytmp4" || command === "mp4"
 
-    const res = await ytsyl(
-      text,
-      isVideo ? "video" : "audio"
-    )
+    const res = await ytsyl(url, isVideo ? "video" : "audio")
 
     if (res.thumbnail) {
       await conn.sendMessage(
@@ -56,7 +49,7 @@ const handler = async (m, { conn, text, command }) => {
         {
           image: { url: res.thumbnail },
           caption:
-            `🎵 *${res.title}*\n` +
+            `🎵 ${res.title}\n` +
             `👤 ${res.author}\n` +
             `⏱ ${res.duration}\n` +
             `📦 ${res.size}`
@@ -68,25 +61,15 @@ const handler = async (m, { conn, text, command }) => {
     await conn.sendMessage(
       m.chat,
       isVideo
-        ? {
-            video: { url: res.url },
-            caption: `🎬 ${res.title}`,
-            mimetype: "video/mp4"
-          }
-        : {
-            audio: { url: res.url },
-            mimetype: "audio/mpeg",
-            fileName: `${res.title}.mp3`
-          },
+        ? { video: { url: res.url }, mimetype: "video/mp4" }
+        : { audio: { url: res.url }, mimetype: "audio/mpeg" },
       { quoted: m }
     )
-
-    await m.react("✅")
   } catch (e) {
-    await m.react("❌")
-    m.reply("🚫 Error al procesar el enlace")
+    console.error("[ytmp]", e)
+    m.reply("Error al descargar el contenido")
   }
 }
 
-handler.command = ["ytamp3", "ytamp4", "mp3", "mp4"]
+handler.command = ["ytmp3", "ytmp4", "mp3", "mp4"]
 export default handler
