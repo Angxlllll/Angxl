@@ -32,12 +32,25 @@ function safeName(name = "video") {
     .trim() || "video"
 }
 
+function isSkyUrl(url = "") {
+  try {
+    return new URL(url).host === new URL(API_BASE_ENV).host
+  } catch {
+    return false
+  }
+}
+
 async function downloadToFile(url, filePath) {
+  const headers = { Accept: "*/*" }
+  if (isSkyUrl(url)) headers.apikey = API_KEY_ENV
+
   const res = await axios.get(url, {
     responseType: "stream",
     timeout: 180000,
+    headers,
     validateStatus: () => true
   })
+
   if (res.status >= 400) throw new Error(`HTTP_${res.status}`)
   await streamPipe(res.data, fs.createWriteStream(filePath))
 }
