@@ -17,6 +17,7 @@ const API_KEY_ENV = process.env.API_KEY || "Angxll"
 
 const MAX_MB = 200
 const TIMEOUT_MS = 60000
+const STREAM_TIMEOUT = 300000
 
 function ensureTmp() {
   const tmp = path.join(process.cwd(), "tmp")
@@ -30,21 +31,6 @@ function isSkyUrl(url = "") {
   } catch {
     return false
   }
-}
-
-async function downloadToFile(url, filePath) {
-  const headers = { Accept: "*/*" }
-  if (isSkyUrl(url)) headers.apikey = API_KEY_ENV
-
-  const res = await axios.get(url, {
-    responseType: "stream",
-    timeout: 180000,
-    headers,
-    validateStatus: () => true
-  })
-
-  if (res.status >= 400) throw new Error(`HTTP_${res.status}`)
-  await streamPipe(res.data, fs.createWriteStream(filePath))
 }
 
 async function sendFast(conn, msg, video, caption) {
@@ -85,14 +71,29 @@ async function sendSafe(conn, msg, video, caption) {
   if (!dl) throw new Error("No media url")
   if (dl.startsWith("/")) dl = API_BASE_ENV + dl
 
+  const headers = isSkyUrl(dl) ? { apikey: API_KEY_ENV } : {}
+
+  // 🔥 INTENTO 1: STREAM DIRECTO (SIN DISCO)
+  try {
+    await conn.sendMessage(
+      msg.chat,
+      {
+        video: { url: dl },
+        mimetype: "video/mp4",
+        caption
+      },
+      { quoted: msg }
+    )
+    return
+  } catch {}
+
+  // 🛡️ FALLBACK: DESCARGA SEGURA CON CORTE POR TAMAÑO
   const tmp = ensureTmp()
   const filePath = path.join(tmp, `${Date.now()}.mp4`)
 
-  const headers = isSkyUrl(dl) ? { apikey: API_KEY_ENV } : {}
-
   const res = await axios.get(dl, {
     responseType: "stream",
-    timeout: 0,
+    timeout: STREAM_TIMEOUT,
     headers,
     validateStatus: () => true
   })
@@ -100,20 +101,26 @@ async function sendSafe(conn, msg, video, caption) {
   if (res.status >= 400) throw new Error(`HTTP_${res.status}`)
 
   const write = fs.createWriteStream(filePath)
-  res.data.pipe(write)
-
   let size = 0
-  res.data.on("data", c => size += c.length)
+  let aborted = false
+
+  res.data.on("data", chunk => {
+    size += chunk.length
+    if (size / 1024 / 1024 > MAX_MB) {
+      aborted = true
+      res.data.destroy()
+      write.destroy()
+      fs.existsSync(filePath) && fs.unlinkSync(filePath)
+    }
+  })
 
   await new Promise((resolve, reject) => {
     write.on("finish", resolve)
     write.on("error", reject)
+    res.data.pipe(write)
   })
 
-  if (size / 1024 / 1024 > MAX_MB) {
-    fs.unlinkSync(filePath)
-    throw new Error("Video demasiado grande")
-  }
+  if (aborted) throw new Error("Video demasiado grande")
 
   try {
     await conn.sendMessage(
