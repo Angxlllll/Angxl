@@ -9,28 +9,26 @@ import NodeCache from 'node-cache'
 import yargs from 'yargs'
 import syntaxerror from 'syntax-error'
 
-import { makeWASocket } from './lib/simple.js'
+import * as baileys from '@whiskeysockets/baileys'
 import store from './lib/store.js'
 
 const {
+  makeWASocket,
   DisconnectReason,
   useMultiFileAuthState,
   fetchLatestBaileysVersion,
   makeCacheableSignalKeyStore,
   jidNormalizedUser,
   Browsers
-} = await import('@whiskeysockets/baileys')
+} = baileys
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 global.opts = yargs(process.argv.slice(2)).exitProcess(false).parse()
 global.prefixes = ['.', '!', '#', '/']
 
-const USED_PREFIXES = Object.freeze(
-  Array.isArray(global.prefixes) ? global.prefixes : ['.']
-)
+const sessions = global.sessions || 'sessions'
 
-const sessions = global.sessions
 const { state, saveCreds } = await useMultiFileAuthState(sessions)
 const { version } = await fetchLatestBaileysVersion()
 
@@ -40,23 +38,23 @@ const userDevicesCache = new NodeCache()
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
 const question = q => new Promise(r => rl.question(q, r))
 
-let opcion = process.argv.includes('qr') ? '1' : null
+let option = process.argv.includes('qr') ? '1' : null
 let phoneNumber = global.botNumber
 
-if (!opcion && !phoneNumber && !fs.existsSync(`./${sessions}/creds.json`)) {
+if (!option && !phoneNumber && !fs.existsSync(`./${sessions}/creds.json`)) {
   do {
-    opcion = await question(
+    option = await question(
       chalk.bold.white('Seleccione una opción:\n') +
       chalk.blue('1. Código QR\n') +
       chalk.cyan('2. Código de texto\n--> ')
     )
-  } while (!/^[12]$/.test(opcion))
+  } while (!/^[12]$/.test(option))
 }
 
 const connectionOptions = {
   logger: pino({ level: 'silent' }),
-  printQRInTerminal: opcion === '1',
-  browser: opcion === '2'
+  printQRInTerminal: option === '1',
+  browser: option === '2'
     ? ['Android', 'Chrome', '13']
     : Browsers.macOS('Desktop'),
   auth: {
@@ -96,7 +94,7 @@ await new Promise(resolve => {
   conn.ev.on('connection.update', wait)
 })
 
-if (opcion === '2') {
+if (option === '2') {
   console.log(chalk.cyanBright('\nIngresa tu número con código país\n'))
   phoneNumber = await question('--> ')
   const clean = phoneNumber.replace(/\D/g, '')
@@ -113,9 +111,7 @@ async function connectionUpdate(update) {
   const reason = lastDisconnect?.error?.output?.statusCode
 
   if (connection === 'open') {
-    console.log(
-      chalk.greenBright(`✿ Conectado a ${conn.user?.name || 'Bot'}`)
-    )
+    console.log(chalk.greenBright(`✿ Conectado a ${conn.user?.name || 'Bot'}`))
 
     const restarterFile = './lastRestarter.json'
     if (fs.existsSync(restarterFile)) {
@@ -170,19 +166,11 @@ async function reloadHandler(restart) {
     for (const msg of messages || []) {
       if (!msg?.message) continue
       if (msg.key?.fromMe) continue
-
-      const text =
-        msg.message?.conversation ||
-        msg.message?.extendedTextMessage?.text ||
-        msg.message?.imageMessage?.caption ||
-        msg.message?.videoMessage?.caption ||
-        ''
-
       try {
-  conn.handler({ messages: [msg] })
-} catch (err) {
-  console.error('handleMessage error:', err)
-}
+        conn.handler({ messages: [msg] })
+      } catch (err) {
+        console.error('handleMessage error:', err)
+      }
     }
   })
 
@@ -220,7 +208,6 @@ fs.watch(pluginRoot, { recursive: true }, (_, file) => {
   if (!file?.endsWith('.js')) return
 
   const full = path.join(pluginRoot, file)
-
   clearTimeout(reloadTimers.get(full))
 
   reloadTimers.set(
