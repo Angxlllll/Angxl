@@ -26,6 +26,10 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 global.opts = yargs(process.argv.slice(2)).exitProcess(false).parse()
 global.prefixes = ['.', '!', '#', '/']
 
+const USED_PREFIXES = Object.freeze(
+  Array.isArray(global.prefixes) ? global.prefixes : ['.']
+)
+
 const sessions = global.sessions
 const { state, saveCreds } = await useMultiFileAuthState(sessions)
 const { version } = await fetchLatestBaileysVersion()
@@ -129,6 +133,9 @@ async function connectionUpdate(update) {
 
   if (connection === 'close') {
     if (reason !== DisconnectReason.loggedOut) {
+      try {
+        conn.ev.removeAllListeners()
+      } catch {}
       await reloadHandler(true)
     }
   }
@@ -157,7 +164,26 @@ async function reloadHandler(restart) {
   conn.connectionUpdate = connectionUpdate.bind(conn)
   conn.credsUpdate = saveCreds.bind(conn)
 
-  conn.ev.on('messages.upsert', conn.handler)
+  conn.ev.on('messages.upsert', async ({ messages, type }) => {
+    if (type !== 'notify') return
+
+    for (const msg of messages || []) {
+      if (!msg?.message) continue
+      if (msg.key?.fromMe) continue
+
+      const text =
+        msg.message?.conversation ||
+        msg.message?.extendedTextMessage?.text ||
+        msg.message?.imageMessage?.caption ||
+        msg.message?.videoMessage?.caption ||
+        ''
+
+      conn.handler(msg).catch(err =>
+        console.error('handleMessage error:', err)
+      )
+    }
+  })
+
   conn.ev.on('connection.update', conn.connectionUpdate)
   conn.ev.on('creds.update', conn.credsUpdate)
 
@@ -186,28 +212,37 @@ async function loadPlugins(dir) {
 
 await loadPlugins(pluginRoot)
 
-fs.watch(pluginRoot, { recursive: true }, async (_, file) => {
+const reloadTimers = new Map()
+
+fs.watch(pluginRoot, { recursive: true }, (_, file) => {
   if (!file?.endsWith('.js')) return
 
   const full = path.join(pluginRoot, file)
 
-  if (!fs.existsSync(full)) {
-    delete global.plugins[full]
-    return
-  }
+  clearTimeout(reloadTimers.get(full))
 
-  const err = syntaxerror(
-    fs.readFileSync(full),
+  reloadTimers.set(
     full,
-    { sourceType: 'module', allowAwaitOutsideFunction: true }
+    setTimeout(async () => {
+      if (!fs.existsSync(full)) {
+        delete global.plugins[full]
+        return
+      }
+
+      const err = syntaxerror(
+        fs.readFileSync(full),
+        full,
+        { sourceType: 'module', allowAwaitOutsideFunction: true }
+      )
+
+      if (err) return
+
+      try {
+        const m = await import(`${full}?update=${Date.now()}`)
+        global.plugins[full] = m.default || m
+      } catch {}
+    }, 150)
   )
-
-  if (err) return
-
-  try {
-    const m = await import(`${full}?update=${Date.now()}`)
-    global.plugins[full] = m.default || m
-  } catch {}
 })
 
 process.on('uncaughtException', err => {
