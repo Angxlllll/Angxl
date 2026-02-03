@@ -1,4 +1,6 @@
 import { smsg, decodeJid } from './lib/simple.js'
+import fs from 'fs'
+import { fileURLToPath } from 'url'
 
 const DIGITS = s => String(s || '').replace(/\D/g, '')
 
@@ -42,12 +44,32 @@ global.dfail = async (type, m, conn) => {
 
 global.groupMetaCache ||= new Map()
 
-setInterval(() => {
-  const now = Date.now()
-  for (const [k, v] of global.groupMetaCache) {
-    if (now - v.ts > 15000) global.groupMetaCache.delete(k)
+function getCachedGroupMeta(jid) {
+  const v = global.groupMetaCache.get(jid)
+  if (!v) return null
+  if (Date.now() - v.ts > 15000) {
+    global.groupMetaCache.delete(jid)
+    return null
   }
-}, 30000)
+  return v
+}
+
+function parseCommand(text, prefixes) {
+  if (!text) return null
+  const fc = text[0]
+  if (!prefixes.includes(fc)) return null
+  const body = text.slice(1).trim()
+  if (!body) return null
+  const parts = body.split(/\s+/)
+  return {
+    usedPrefix: fc,
+    command: (parts.shift() || '')
+      .toLowerCase()
+      .replace(/[\u200B-\u200D\uFEFF]/g, '')
+      .trim(),
+    args: parts
+  }
+}
 
 export function handler(chatUpdate) {
   if (!chatUpdate?.messages) return
@@ -67,24 +89,10 @@ async function handleMessage(m) {
         : [global.prefix || '.']
     ))
 
-  let usedPrefix = null
-  let command = ''
-  let args = []
+  const parsed = parseCommand(textMsg, prefixes)
+  if (!parsed) return
 
-  const fc = textMsg[0]
-
-  if (prefixes.includes(fc)) {
-    usedPrefix = fc
-    const body = textMsg.slice(1).trim()
-    if (!body) return
-    args = body.split(/\s+/)
-    command = (args.shift() || '')
-      .toLowerCase()
-      .replace(/[\u200B-\u200D\uFEFF]/g, '')
-      .trim()
-  } else {
-    command = ''
-  }
+  const { command, args, usedPrefix } = parsed
 
   const senderNum = DIGITS(m.sender)
   const isROwner = OWNER_NUMBERS.includes(senderNum)
@@ -97,9 +105,9 @@ async function handleMessage(m) {
 
   const loadGroupData = async () => {
     if (!m.isGroup) return
-    let cached = global.groupMetaCache.get(m.chat)
+    let cached = getCachedGroupMeta(m.chat)
 
-    if (!cached || Date.now() - cached.ts > 15000) {
+    if (!cached) {
       const meta = await this.groupMetadata(m.chat)
       const raw = meta.participants || []
       const norm = lidParser(raw)
@@ -129,7 +137,7 @@ async function handleMessage(m) {
     participants = groupMetadata.participants || []
     isAdmin = cached.adminNums.has(senderNum)
     const botJid = decodeJid(this.user?.id || this.user?.jid)
-isBotAdmin = cached.adminNums.has(DIGITS(botJid))
+    isBotAdmin = cached.adminNums.has(DIGITS(botJid))
   }
 
   for (const plugin of Object.values(global.plugins)) {
@@ -154,8 +162,12 @@ isBotAdmin = cached.adminNums.has(DIGITS(botJid))
       continue
     }
 
-    if (m.isGroup && (plugin.admin || plugin.botAdmin)) {
-      if (!groupMetadata) await loadGroupData()
+    const needsGroupMeta =
+      m.isGroup &&
+      (plugin.group || plugin.admin || plugin.botAdmin)
+
+    if (needsGroupMeta && !groupMetadata) {
+      await loadGroupData()
     }
 
     participants = m.isGroup ? participants : []
@@ -189,21 +201,25 @@ isBotAdmin = cached.adminNums.has(DIGITS(botJid))
 
     if (!exec) continue
 
-    setImmediate(() =>
-      exec.call(this, m, {
-        conn: this,
-        args,
-        usedPrefix,
-        command,
-        participants,
-        groupMetadata,
-        isROwner,
-        isOwner,
-        isAdmin,
-        isBotAdmin,
-        chat: m.chat
-      })
-    )
+    setImmediate(async () => {
+      try {
+        await exec.call(this, m, {
+          conn: this,
+          args,
+          usedPrefix,
+          command,
+          participants,
+          groupMetadata,
+          isROwner,
+          isOwner,
+          isAdmin,
+          isBotAdmin,
+          chat: m.chat
+        })
+      } catch (err) {
+        console.error('[PLUGIN ERROR]', plugin?.name || command, err)
+      }
+    })
 
     return
   }
