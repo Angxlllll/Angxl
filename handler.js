@@ -103,10 +103,7 @@ async function handleMessage(m) {
 if (!parsed) {
   parsed = {
     usedPrefix: '',
-    command: textMsg
-      .toLowerCase()
-      .replace(/[\u200B-\u200D\uFEFF]/g, '')
-      .trim(),
+    command: null,
     args: []
   }
 }
