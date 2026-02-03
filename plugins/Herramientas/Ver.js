@@ -12,7 +12,7 @@ global.wa = {
   generateWAMessageContent
 }
 
-const unwrapMessage = m => {
+const unwrapMessage = (m) => {
   let n = m
   while (
     n?.viewOnceMessage?.message ||
@@ -45,24 +45,20 @@ const handler = async (msg, ctx = {}) => {
 
   try {
     if (!wa) {
-      return conn.sendMessage(chat, { text: "⚠️ Helper no disponible." }, { quoted: msg })
-    }
-
-    const ext = msg.message?.extendedTextMessage?.contextInfo
-    const quotedRaw = ext?.quotedMessage
-
-    if (!quotedRaw) {
       return conn.sendMessage(
         chat,
-        { text: "❌ Responde a un audio, imagen o video one-view." },
+        { text: "⚠️ Falta el helper de medios. Reinicia el bot." },
         { quoted: msg }
       )
     }
 
-    if (ext?.isViewOnce !== true) {
+    const quotedRaw =
+      msg.message?.extendedTextMessage?.contextInfo?.quotedMessage
+
+    if (!quotedRaw) {
       return conn.sendMessage(
         chat,
-        { text: "⚠️ Solo funciona con Audio, Imagen o Video de una sola vista (one-view)." },
+        { text: "❌ Responde a una imagen, video o nota de voz." },
         { quoted: msg }
       )
     }
@@ -82,12 +78,14 @@ const handler = async (msg, ctx = {}) => {
     } else {
       return conn.sendMessage(
         chat,
-        { text: "❌ El mensaje citado no es compatible." },
+        { text: "❌ El mensaje citado no contiene un archivo compatible." },
         { quoted: msg }
       )
     }
 
-    await conn.sendMessage(chat, { react: { text: "⏳", key: msg.key } })
+    await conn.sendMessage(chat, {
+      react: { text: "⏳", key: msg.key }
+    })
 
     const stream = await wa.downloadContentFromMessage(content, type)
     let buffer = Buffer.alloc(0)
@@ -95,17 +93,24 @@ const handler = async (msg, ctx = {}) => {
 
     const payload = { mimetype: content.mimetype }
 
-    if (type === "image") payload.image = buffer
-    else if (type === "video") payload.video = buffer
-    else {
+    if (type === "image") {
+      payload.image = buffer
+    } else if (type === "video") {
+      payload.video = buffer
+    } else {
       payload.audio = buffer
       payload.ptt = content.ptt ?? true
+      if (content.seconds) payload.seconds = content.seconds
     }
 
     await conn.sendMessage(chat, payload, { quoted: msg })
-    await conn.sendMessage(chat, { react: { text: "✅", key: msg.key } })
+
+    await conn.sendMessage(chat, {
+      react: { text: "✅", key: msg.key }
+    })
 
   } catch (e) {
+    console.error("Error en comando ver:", e)
     await conn.sendMessage(
       chat,
       { text: "❌ Error al procesar el archivo." },
