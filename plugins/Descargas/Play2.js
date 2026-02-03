@@ -73,7 +73,6 @@ async function sendSafe(conn, msg, video, caption) {
 
   const headers = isSkyUrl(dl) ? { apikey: API_KEY_ENV } : {}
 
-  // 🔥 INTENTO 1: STREAM DIRECTO (SIN DISCO)
   try {
     await conn.sendMessage(
       msg.chat,
@@ -87,7 +86,6 @@ async function sendSafe(conn, msg, video, caption) {
     return
   } catch {}
 
-  // 🛡️ FALLBACK: DESCARGA SEGURA CON CORTE POR TAMAÑO
   const tmp = ensureTmp()
   const filePath = path.join(tmp, `${Date.now()}.mp4`)
 
