@@ -45,41 +45,29 @@ const handler = async (msg, ctx = {}) => {
 
   try {
     if (!wa) {
-      return conn.sendMessage(
-        chat,
-        { text: "⚠️ Helper de medios no disponible. Reinicia el bot." },
-        { quoted: msg }
-      )
+      return conn.sendMessage(chat, { text: "⚠️ Helper no disponible." }, { quoted: msg })
     }
 
-    const quotedRaw =
-      msg.message?.extendedTextMessage?.contextInfo?.quotedMessage
+    const ext = msg.message?.extendedTextMessage?.contextInfo
+    const quotedRaw = ext?.quotedMessage
 
     if (!quotedRaw) {
       return conn.sendMessage(
         chat,
-        { text: "❌ Responde a un audio, imagen o video de una sola vista." },
+        { text: "❌ Responde a un audio, imagen o video one-view." },
+        { quoted: msg }
+      )
+    }
+
+    if (ext?.isViewOnce !== true) {
+      return conn.sendMessage(
+        chat,
+        { text: "⚠️ Solo funciona con Audio, Imagen o Video de una sola vista (one-view)." },
         { quoted: msg }
       )
     }
 
     const q = unwrapMessage(quotedRaw)
-
-    const isViewOnce =
-      quotedRaw?.viewOnceMessage ||
-      quotedRaw?.viewOnceMessageV2 ||
-      quotedRaw?.viewOnceMessageV2Extension ||
-      q?.viewOnce === true
-
-    if (!isViewOnce) {
-      return conn.sendMessage(
-        chat,
-        {
-          text: "⚠️ Solo funciona con Audio, Imagen o Video de una sola vista (one-view)."
-        },
-        { quoted: msg }
-      )
-    }
 
     let type, content
     if (q.imageMessage) {
@@ -99,9 +87,7 @@ const handler = async (msg, ctx = {}) => {
       )
     }
 
-    await conn.sendMessage(chat, {
-      react: { text: "⏳", key: msg.key }
-    })
+    await conn.sendMessage(chat, { react: { text: "⏳", key: msg.key } })
 
     const stream = await wa.downloadContentFromMessage(content, type)
     let buffer = Buffer.alloc(0)
@@ -109,20 +95,15 @@ const handler = async (msg, ctx = {}) => {
 
     const payload = { mimetype: content.mimetype }
 
-    if (type === "image") {
-      payload.image = buffer
-    } else if (type === "video") {
-      payload.video = buffer
-    } else {
+    if (type === "image") payload.image = buffer
+    else if (type === "video") payload.video = buffer
+    else {
       payload.audio = buffer
       payload.ptt = content.ptt ?? true
     }
 
     await conn.sendMessage(chat, payload, { quoted: msg })
-
-    await conn.sendMessage(chat, {
-      react: { text: "✅", key: msg.key }
-    })
+    await conn.sendMessage(chat, { react: { text: "✅", key: msg.key } })
 
   } catch (e) {
     await conn.sendMessage(
