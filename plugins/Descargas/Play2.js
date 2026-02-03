@@ -35,24 +35,15 @@ function isSkyUrl(url = "") {
 
 async function sendFast(conn, msg, video, caption) {
   const res = await axios.get(`${API_BASE_GLOBAL}/ytdl`, {
-    params: {
-      url: video.url,
-      type: "mp4",
-      apikey: API_KEY_GLOBAL
-    },
+    params: { url: video.url, type: "mp4", apikey: API_KEY_GLOBAL },
     timeout: 20000
   })
 
-  if (!res?.data?.status || !res.data.result?.url)
-    throw new Error("Fast failed")
+  if (!res?.data?.status || !res.data.result?.url) throw new Error("Fast failed")
 
   await conn.sendMessage(
     msg.chat,
-    {
-      video: { url: res.data.result.url },
-      mimetype: "video/mp4",
-      caption
-    },
+    { video: { url: res.data.result.url }, mimetype: "video/mp4", caption },
     { quoted: msg }
   )
 }
@@ -76,11 +67,7 @@ async function sendSafe(conn, msg, video, caption) {
   try {
     await conn.sendMessage(
       msg.chat,
-      {
-        video: { url: dl },
-        mimetype: "video/mp4",
-        caption
-      },
+      { video: { url: dl }, mimetype: "video/mp4", caption },
       { quoted: msg }
     )
     return
@@ -89,58 +76,41 @@ async function sendSafe(conn, msg, video, caption) {
   const tmp = ensureTmp()
   const filePath = path.join(tmp, `${Date.now()}.mp4`)
 
-  const res = await axios.get(dl, {
+  const resStream = await axios.get(dl, {
     responseType: "stream",
     timeout: STREAM_TIMEOUT,
     headers,
     validateStatus: () => true
   })
 
-  if (res.status >= 400) throw new Error(`HTTP_${res.status}`)
+  if (resStream.status >= 400) throw new Error(`HTTP_${resStream.status}`)
 
-  const write = fs.createWriteStream(filePath)
   let size = 0
-  let aborted = false
+  const writeStream = fs.createWriteStream(filePath)
 
-  res.data.on("data", chunk => {
+  resStream.data.on("data", chunk => {
     size += chunk.length
     if (size / 1024 / 1024 > MAX_MB) {
-      aborted = true
-      res.data.destroy()
-      write.destroy()
+      resStream.data.destroy()
+      writeStream.destroy()
       fs.existsSync(filePath) && fs.unlinkSync(filePath)
+      throw new Error("Video demasiado grande")
     }
   })
 
-  await new Promise((resolve, reject) => {
-    write.on("finish", resolve)
-    write.on("error", reject)
-    res.data.pipe(write)
-  })
+  await streamPipe(resStream.data, writeStream)
 
-  if (aborted) throw new Error("Video demasiado grande")
+  await conn.sendMessage(
+    msg.chat,
+    { video: { stream: fs.createReadStream(filePath), length: size }, mimetype: "video/mp4", caption },
+    { quoted: msg }
+  )
 
-  try {
-    await conn.sendMessage(
-      msg.chat,
-      {
-        video: {
-          stream: fs.createReadStream(filePath),
-          length: size
-        },
-        mimetype: "video/mp4",
-        caption
-      },
-      { quoted: msg }
-    )
-  } finally {
-    fs.existsSync(filePath) && fs.unlinkSync(filePath)
-  }
+  fs.existsSync(filePath) && fs.unlinkSync(filePath)
 }
 
 const handler = async (msg, { conn, args, usedPrefix, command }) => {
   const query = args.join(" ").trim()
-
   if (!query) {
     return conn.sendMessage(
       msg.chat,
@@ -149,17 +119,14 @@ const handler = async (msg, { conn, args, usedPrefix, command }) => {
     )
   }
 
-  await conn.sendMessage(msg.chat, {
-    react: { text: "🎬", key: msg.key }
-  })
+  await conn.sendMessage(msg.chat, { react: { text: "🎬", key: msg.key } })
 
   let finished = false
-
-  const timeoutPromise = new Promise((_, reject) => {
+  const timeoutPromise = new Promise((_, reject) =>
     setTimeout(() => {
       if (!finished) reject(new Error("Tiempo de espera agotado"))
     }, TIMEOUT_MS)
-  })
+  )
 
   try {
     await Promise.race([
@@ -168,11 +135,7 @@ const handler = async (msg, { conn, args, usedPrefix, command }) => {
         const video = search.videos?.[0]
         if (!video) throw new Error("Sin resultados")
 
-        const caption = `
-🎬 *${video.title}*
-🎥 ${video.author?.name || "—"}
-⏱ ${video.timestamp || "--:--"}
-        `.trim()
+        const caption = `🎬 *${video.title}*\n🎥 ${video.author?.name || "—"}\n⏱ ${video.timestamp || "--:--"}`
 
         try {
           await sendFast(conn, msg, video, caption)
