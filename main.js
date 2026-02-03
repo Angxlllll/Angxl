@@ -178,9 +178,11 @@ async function reloadHandler(restart) {
         msg.message?.videoMessage?.caption ||
         ''
 
-      conn.handler(msg).catch(err =>
-        console.error('handleMessage error:', err)
-      )
+      try {
+  conn.handler({ messages: [msg] })
+} catch (err) {
+  console.error('handleMessage error:', err)
+}
     }
   })
 
