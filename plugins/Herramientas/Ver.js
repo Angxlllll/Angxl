@@ -1,3 +1,17 @@
+import {
+  downloadContentFromMessage,
+  generateWAMessageFromContent,
+  prepareWAMessageMedia,
+  generateWAMessageContent
+} from "@whiskeysockets/baileys"
+
+global.wa = {
+  downloadContentFromMessage,
+  generateWAMessageFromContent,
+  prepareWAMessageMedia,
+  generateWAMessageContent
+}
+
 const unwrapMessage = m => {
   let n = m
   while (
