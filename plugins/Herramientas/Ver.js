@@ -58,27 +58,28 @@ const handler = async (msg, ctx = {}) => {
     if (!quotedRaw) {
       return conn.sendMessage(
         chat,
-        { text: "❌ Responde a un audio, imagen o video *one-view*." },
-        { quoted: msg }
-      )
-    }
-
-    const isViewOnce =
-      quotedRaw.viewOnceMessage ||
-      quotedRaw.viewOnceMessageV2 ||
-      quotedRaw.viewOnceMessageV2Extension
-
-    if (!isViewOnce) {
-      return conn.sendMessage(
-        chat,
-        {
-          text: "⚠️ Solo funciona con *Audio, Imagen o Video de una sola vista (one-view)*."
-        },
+        { text: "❌ Responde a un audio, imagen o video de una sola vista." },
         { quoted: msg }
       )
     }
 
     const q = unwrapMessage(quotedRaw)
+
+    const isViewOnce =
+      quotedRaw?.viewOnceMessage ||
+      quotedRaw?.viewOnceMessageV2 ||
+      quotedRaw?.viewOnceMessageV2Extension ||
+      q?.viewOnce === true
+
+    if (!isViewOnce) {
+      return conn.sendMessage(
+        chat,
+        {
+          text: "⚠️ Solo funciona con Audio, Imagen o Video de una sola vista (one-view)."
+        },
+        { quoted: msg }
+      )
+    }
 
     let type, content
     if (q.imageMessage) {
@@ -93,9 +94,7 @@ const handler = async (msg, ctx = {}) => {
     } else {
       return conn.sendMessage(
         chat,
-        {
-          text: "❌ El mensaje one-view citado no es audio, imagen ni video."
-        },
+        { text: "❌ El mensaje citado no es compatible." },
         { quoted: msg }
       )
     }
@@ -126,10 +125,9 @@ const handler = async (msg, ctx = {}) => {
     })
 
   } catch (e) {
-    console.error("Error en comando ver:", e)
     await conn.sendMessage(
       chat,
-      { text: "❌ Error al procesar el archivo one-view." },
+      { text: "❌ Error al procesar el archivo." },
       { quoted: msg }
     )
   }
