@@ -98,8 +98,18 @@ async function handleMessage(m) {
   const textMsg = m.text
   const prefixes = getPrefixes()
 
-  const parsed = parseCommand(textMsg, prefixes)
-  if (!parsed) return
+  let parsed = parseCommand(textMsg, prefixes)
+
+if (!parsed) {
+  parsed = {
+    usedPrefix: '',
+    command: textMsg
+      .toLowerCase()
+      .replace(/[\u200B-\u200D\uFEFF]/g, '')
+      .trim(),
+    args: []
+  }
+}
 
   const { command, args, usedPrefix } = parsed
 
