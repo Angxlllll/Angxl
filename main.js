@@ -5,7 +5,6 @@ import { fileURLToPath } from 'url'
 import pino from 'pino'
 import NodeCache from 'node-cache'
 import yargs from 'yargs'
-
 import * as baileys from '@whiskeysockets/baileys'
 import store from './lib/store.js'
 
@@ -30,6 +29,8 @@ const { version } = await fetchLatestBaileysVersion()
 const msgRetryCounterCache = new NodeCache()
 const userDevicesCache = new NodeCache()
 
+let pairingRequested = false
+
 const conn = makeWASocket({
   logger: pino({ level: 'fatal' }),
   printQRInTerminal: false,
@@ -53,20 +54,12 @@ const conn = makeWASocket({
   msgRetryCounterCache,
   userDevicesCache,
   version,
-  keepAliveIntervalMs: 60000
+  keepAliveIntervalMs: 55000,
+  connectTimeoutMs: 60000,
+  defaultQueryTimeoutMs: 60000
 })
 
 global.conn = conn
-
-if (!fs.existsSync(`./${sessions}/creds.json`)) {
-  const phone = String(global.botNumber || '').replace(/\D/g, '')
-  if (!phone) {
-    console.error('Falta global.botNumber')
-    process.exit(1)
-  }
-  const code = await conn.requestPairingCode(phone)
-  console.log(`Ingresa este código en el número global: ${code.match(/.{1,4}/g).join(' ')}`)
-}
 
 let handler = await import('./handler.js')
 let isInit = true
@@ -76,6 +69,19 @@ async function connectionUpdate(update) {
   const reason = lastDisconnect?.error?.output?.statusCode
 
   if (connection === 'open') {
+    if (!fs.existsSync(`./${sessions}/creds.json`) && !pairingRequested) {
+      pairingRequested = true
+      const phone = String(global.botNumber || '').replace(/\D/g, '')
+      if (!phone) {
+        console.error('Falta global.botNumber')
+        process.exit(1)
+      }
+      const code = await conn.requestPairingCode(phone)
+      console.log(
+        `Ingresa este código en el número global: ${code.match(/.{1,4}/g).join(' ')}`
+      )
+    }
+
     const restarterFile = './lastRestarter.json'
     if (fs.existsSync(restarterFile)) {
       try {
@@ -95,16 +101,15 @@ async function connectionUpdate(update) {
   }
 
   if (connection === 'close') {
-    if (reason !== DisconnectReason.loggedOut) {
-      try {
-        conn.ev.removeAllListeners()
-      } catch {}
-      await reloadHandler(true)
+    if (reason === DisconnectReason.loggedOut) {
+      console.error('Sesión cerrada')
+      process.exit(1)
     }
+    setTimeout(() => reloadHandler(true), 2000)
   }
 }
 
-async function reloadHandler() {
+async function reloadHandler(restart = false) {
   try {
     const mod = await import(`./handler.js?update=${Date.now()}`)
     handler = mod
@@ -122,21 +127,10 @@ async function reloadHandler() {
 
   conn.ev.on('messages.upsert', async ({ messages, type }) => {
     if (type !== 'notify') return
-
-    const msg = messages[0]
-    if (!msg) return
-    if (!msg.message) return
+    const msg = messages?.[0]
+    if (!msg?.message) return
     if (msg.key.fromMe) return
-
-    const jid = msg.key.remoteJid
-    if (jid === 'status@broadcast') return
-
-    const text =
-      msg.message.conversation ||
-      msg.message.extendedTextMessage?.text ||
-      ''
-
-    if (!global.prefixes.some(p => text.startsWith(p))) return
+    if (msg.key.remoteJid === 'status@broadcast') return
 
     try {
       await conn.handler({ messages: [msg] })
@@ -184,7 +178,7 @@ fs.watch(pluginRoot, (_, file) => {
         const m = await import(`${full}?update=${Date.now()}`)
         global.plugins[full] = m.default || m
       } catch {}
-    }, 150)
+    }, 200)
   )
 })
 
