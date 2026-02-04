@@ -211,6 +211,9 @@ await loadPlugins(pluginRoot)
 
 const reloadTimers = new Map()
 
+fs.watch(pluginRoot, { recursive: true }, (_, file) => {
+  if (!file || !file.endsWith('.js')) return
+
   const full = path.join(pluginRoot, file)
   clearTimeout(reloadTimers.get(full))
 
@@ -222,12 +225,13 @@ const reloadTimers = new Map()
         return
       }
 
-      if (err) return
-
       try {
         const m = await import(`${full}?update=${Date.now()}`)
         global.plugins[full] = m.default || m
-      } catch {}
+        console.log(chalk.yellowBright(`↻ Plugin recargado: ${file}`))
+      } catch (e) {
+        console.error(`Error recargando ${file}`, e)
+      }
     }, 150)
   )
 })
