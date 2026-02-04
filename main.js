@@ -29,7 +29,19 @@ const { version } = await fetchLatestBaileysVersion()
 const msgRetryCounterCache = new NodeCache()
 const userDevicesCache = new NodeCache()
 
-let pairingRequested = false
+function waitForOpen(conn) {
+  return new Promise(resolve => {
+    const listener = u => {
+      if (u.connection === 'open') {
+        conn.ev.off('connection.update', listener)
+        resolve()
+      }
+    }
+    conn.ev.on('connection.update', listener)
+  })
+}
+
+console.log('Inicializando conexión con WhatsApp...')
 
 const conn = makeWASocket({
   logger: pino({ level: 'fatal' }),
@@ -61,6 +73,23 @@ const conn = makeWASocket({
 
 global.conn = conn
 
+await waitForOpen(conn)
+
+console.log('Conexión abierta con WhatsApp')
+
+if (!fs.existsSync(`./${sessions}/creds.json`)) {
+  const phone = String(global.botNumber || '').replace(/\D/g, '')
+  if (!phone) {
+    console.error('Falta global.botNumber')
+    process.exit(1)
+  }
+
+  const code = await conn.requestPairingCode(phone)
+  console.log(
+    `Ingresa este código en el número global: ${code.match(/.{1,4}/g).join(' ')}`
+  )
+}
+
 let handler = await import('./handler.js')
 let isInit = true
 
@@ -69,19 +98,6 @@ async function connectionUpdate(update) {
   const reason = lastDisconnect?.error?.output?.statusCode
 
   if (connection === 'open') {
-    if (!fs.existsSync(`./${sessions}/creds.json`) && !pairingRequested) {
-      pairingRequested = true
-      const phone = String(global.botNumber || '').replace(/\D/g, '')
-      if (!phone) {
-        console.error('Falta global.botNumber')
-        process.exit(1)
-      }
-      const code = await conn.requestPairingCode(phone)
-      console.log(
-        `Ingresa este código en el número global: ${code.match(/.{1,4}/g).join(' ')}`
-      )
-    }
-
     const restarterFile = './lastRestarter.json'
     if (fs.existsSync(restarterFile)) {
       try {
@@ -105,11 +121,11 @@ async function connectionUpdate(update) {
       console.error('Sesión cerrada')
       process.exit(1)
     }
-    setTimeout(() => reloadHandler(true), 2000)
+    setTimeout(() => reloadHandler(), 2000)
   }
 }
 
-async function reloadHandler(restart = false) {
+async function reloadHandler() {
   try {
     const mod = await import(`./handler.js?update=${Date.now()}`)
     handler = mod
@@ -131,7 +147,6 @@ async function reloadHandler(restart = false) {
     if (!msg?.message) return
     if (msg.key.fromMe) return
     if (msg.key.remoteJid === 'status@broadcast') return
-
     try {
       await conn.handler({ messages: [msg] })
     } catch {}
