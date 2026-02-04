@@ -7,7 +7,6 @@ import chalk from 'chalk'
 import pino from 'pino'
 import NodeCache from 'node-cache'
 import yargs from 'yargs'
-import syntaxerror from 'syntax-error'
 import { fileURLToPath } from 'url'
 
 import * as baileys from '@whiskeysockets/baileys'
