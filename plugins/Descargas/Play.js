@@ -9,7 +9,7 @@ const handler = async (m, { conn, args }) => {
   if (!query) return m.reply("🎶 Ingresa el nombre del video de YouTube.")
 
   await conn.sendMessage(m.chat, {
-    react: { text: "🕘", key: m.key }
+    react: { text: "🔍", key: m.key }
   })
 
   try {
