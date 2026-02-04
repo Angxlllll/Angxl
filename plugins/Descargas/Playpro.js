@@ -187,7 +187,7 @@ const handler = async (m, { conn, args, usedPrefix }) => {
 }
 
 handler.command = ["playpro"]
-handler.customPrefix = /^PLAYPRO::/
+handler.customPrefix = /^(?:\.playpro|PLAYPRO::)/i
 handler.tags = ["descargas"]
 
 export default handler
