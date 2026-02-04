@@ -2,12 +2,9 @@ import './config.js'
 import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
-import readline from 'readline'
-import chalk from 'chalk'
 import pino from 'pino'
 import NodeCache from 'node-cache'
 import yargs from 'yargs'
-import syntaxerror from 'syntax-error'
 
 import * as baileys from '@whiskeysockets/baileys'
 import store from './lib/store.js'
@@ -18,59 +15,32 @@ const {
   useMultiFileAuthState,
   fetchLatestBaileysVersion,
   makeCacheableSignalKeyStore,
-  jidNormalizedUser,
-  Browsers
+  jidNormalizedUser
 } = baileys
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 global.opts = yargs(process.argv.slice(2)).exitProcess(false).parse()
-global.prefixes = ['.', '!', '#', '/']
-
-global.prefixes = Object.freeze(
-  Array.isArray(global.prefixes) ? global.prefixes : ['.']
-)
+global.prefixes = Object.freeze(['.', '!', '#', '/'])
 
 const sessions = global.sessions || 'sessions'
-
 const { state, saveCreds } = await useMultiFileAuthState(sessions)
 const { version } = await fetchLatestBaileysVersion()
 
 const msgRetryCounterCache = new NodeCache()
 const userDevicesCache = new NodeCache()
 
-const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
-const question = q => new Promise(r => rl.question(q, r))
-
-let option = process.argv.includes('qr') ? '1' : null
-let phoneNumber = global.botNumber
-
-if (!option && !phoneNumber && !fs.existsSync(`./${sessions}/creds.json`)) {
-  do {
-    option = await question(
-      chalk.bold.white('Seleccione una opción:\n') +
-      chalk.blue('1. Código QR\n') +
-      chalk.cyan('2. Código de texto\n--> ')
-    )
-  } while (!/^[12]$/.test(option))
-}
-
 const connectionOptions = {
-  logger: pino({ level: 'silent' }),
-  printQRInTerminal: option === '1',
-  browser: option === '2'
-    ? ['Android', 'Chrome', '13']
-    : Browsers.macOS('Desktop'),
+  logger: pino({ level: 'fatal' }),
+  printQRInTerminal: false,
+  browser: ['Android', 'Chrome', '13'],
   auth: {
     creds: state.creds,
-    keys: makeCacheableSignalKeyStore(
-      state.keys,
-      pino({ level: 'fatal' })
-    )
+    keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'fatal' }))
   },
   markOnlineOnConnect: false,
-  generateHighQualityLinkPreview: true,
   syncFullHistory: false,
+  generateHighQualityLinkPreview: false,
   getMessage: async key => {
     try {
       const jid = jidNormalizedUser(key.remoteJid)
@@ -83,7 +53,7 @@ const connectionOptions = {
   msgRetryCounterCache,
   userDevicesCache,
   version,
-  keepAliveIntervalMs: 55000
+  keepAliveIntervalMs: 60000
 }
 
 global.conn = makeWASocket(connectionOptions)
@@ -98,13 +68,14 @@ await new Promise(resolve => {
   conn.ev.on('connection.update', wait)
 })
 
-if (option === '2') {
-  console.log(chalk.cyanBright('\nIngresa tu número con código país\n'))
-  phoneNumber = await question('--> ')
-  const clean = phoneNumber.replace(/\D/g, '')
-  const code = await conn.requestPairingCode(clean)
-  console.log(chalk.greenBright('\nIngresa este código:\n'))
-  console.log(chalk.bold(code.match(/.{1,4}/g).join(' ')))
+if (!fs.existsSync(`./${sessions}/creds.json`)) {
+  const phone = String(global.botNumber || '').replace(/\D/g, '')
+  if (!phone) {
+    console.error('Falta global.botNumber')
+    process.exit(1)
+  }
+  const code = await conn.requestPairingCode(phone)
+  console.log(code.match(/.{1,4}/g).join(' '))
 }
 
 let handler = await import('./handler.js')
@@ -115,16 +86,18 @@ async function connectionUpdate(update) {
   const reason = lastDisconnect?.error?.output?.statusCode
 
   if (connection === 'open') {
-    console.log(chalk.greenBright(`✿ Conectado a ${conn.user?.name || 'Bot'}`))
-
     const restarterFile = './lastRestarter.json'
     if (fs.existsSync(restarterFile)) {
       try {
         const data = JSON.parse(fs.readFileSync(restarterFile, 'utf-8'))
-        if (data?.chatId) {
-          await conn.sendMessage(data.chatId, {
-            text: `✅ *${global.namebot} está en línea nuevamente* 🚀`
-          })
+        if (data?.chatId && data?.key) {
+          await conn.sendMessage(
+            data.chatId,
+            {
+              text: `✅ *${global.namebot} está en línea nuevamente* 🚀`,
+              edit: data.key
+            }
+          )
         }
         fs.unlinkSync(restarterFile)
       } catch {}
@@ -147,13 +120,6 @@ async function reloadHandler(restart) {
     handler = mod
   } catch {}
 
-  if (restart) {
-    try { conn.ws.close() } catch {}
-    conn.ev.removeAllListeners()
-    global.conn = makeWASocket(connectionOptions)
-    isInit = true
-  }
-
   if (!isInit) {
     conn.ev.off('messages.upsert', conn.handler)
     conn.ev.off('connection.update', conn.connectionUpdate)
@@ -166,15 +132,11 @@ async function reloadHandler(restart) {
 
   conn.ev.on('messages.upsert', async ({ messages, type }) => {
     if (type !== 'notify') return
-
     for (const msg of messages || []) {
-      if (!msg?.message) continue
-      if (msg.key?.fromMe) continue
+      if (!msg?.message || msg.key.fromMe) continue
       try {
         conn.handler({ messages: [msg] })
-      } catch (err) {
-        console.error('handleMessage error:', err)
-      }
+      } catch {}
     }
   })
 
@@ -192,10 +154,7 @@ global.plugins = {}
 async function loadPlugins(dir) {
   for (const f of fs.readdirSync(dir)) {
     const full = path.join(dir, f)
-
-    if (fs.statSync(full).isDirectory()) {
-      await loadPlugins(full)
-    } else if (f.endsWith('.js')) {
+    if (f.endsWith('.js')) {
       try {
         const m = await import(`${full}?update=${Date.now()}`)
         global.plugins[full] = m.default || m
@@ -208,12 +167,10 @@ await loadPlugins(pluginRoot)
 
 const reloadTimers = new Map()
 
-fs.watch(pluginRoot, { recursive: true }, (_, file) => {
+fs.watch(pluginRoot, (_, file) => {
   if (!file?.endsWith('.js')) return
-
   const full = path.join(pluginRoot, file)
   clearTimeout(reloadTimers.get(full))
-
   reloadTimers.set(
     full,
     setTimeout(async () => {
@@ -221,15 +178,6 @@ fs.watch(pluginRoot, { recursive: true }, (_, file) => {
         delete global.plugins[full]
         return
       }
-
-      const err = syntaxerror(
-        fs.readFileSync(full),
-        full,
-        { sourceType: 'module', allowAwaitOutsideFunction: true }
-      )
-
-      if (err) return
-
       try {
         const m = await import(`${full}?update=${Date.now()}`)
         global.plugins[full] = m.default || m
@@ -238,6 +186,4 @@ fs.watch(pluginRoot, { recursive: true }, (_, file) => {
   )
 })
 
-process.on('uncaughtException', err => {
-  console.error(err)
-})
+process.on('uncaughtException', () => {})
