@@ -38,12 +38,12 @@ const handler = async (m, { conn, args, usedPrefix }) => {
       caption,
       buttons: [
         {
-          buttonId: ".playproaudio",
+          buttonId: "..playproaudio",
           buttonText: { displayText: "🎵 Descargar audio" },
           type: 1
         },
         {
-          buttonId: ".playprovideo",
+          buttonId: "..playprovideo",
           buttonText: { displayText: "🎬 Descargar video" },
           type: 1
         }
