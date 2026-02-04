@@ -211,9 +211,6 @@ await loadPlugins(pluginRoot)
 
 const reloadTimers = new Map()
 
-fs.watch(pluginRoot, { recursive: true }, (_, file) => {
-  if (!file?.endsWith('.js')) return
-
   const full = path.join(pluginRoot, file)
   clearTimeout(reloadTimers.get(full))
 
@@ -224,12 +221,6 @@ fs.watch(pluginRoot, { recursive: true }, (_, file) => {
         delete global.plugins[full]
         return
       }
-
-      const err = syntaxerror(
-        fs.readFileSync(full),
-        full,
-        { sourceType: 'module', allowAwaitOutsideFunction: true }
-      )
 
       if (err) return
 
