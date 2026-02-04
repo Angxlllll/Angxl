@@ -58,34 +58,25 @@ const connectionOptions = {
 
 global.conn = makeWASocket(connectionOptions)
 
-await new Promise(resolve => {
-  const wait = u => {
-    if (u.connection === 'open' || u.connection === 'connecting') {
-      conn.ev.off('connection.update', wait)
-      resolve()
-    }
-  }
-  conn.ev.on('connection.update', wait)
-})
-
-if (!fs.existsSync(`./${sessions}/creds.json`)) {
-  const phone = String(global.botNumber || '').replace(/\D/g, '')
-  if (!phone) {
-    console.error('Falta global.botNumber')
-    process.exit(1)
-  }
-  const code = await conn.requestPairingCode(phone)
-  console.log(code.match(/.{1,4}/g).join(' '))
-}
-
 let handler = await import('./handler.js')
 let isInit = true
+let pairingDone = false
 
 async function connectionUpdate(update) {
   const { connection, lastDisconnect } = update
   const reason = lastDisconnect?.error?.output?.statusCode
 
   if (connection === 'open') {
+    if (!pairingDone && !fs.existsSync(`./${sessions}/creds.json`)) {
+      pairingDone = true
+      try {
+        const phone = String(global.botNumber || '').replace(/\D/g, '')
+        await new Promise(r => setTimeout(r, 1500))
+        const code = await conn.requestPairingCode(phone)
+        console.log(code.match(/.{1,4}/g).join(' '))
+      } catch {}
+    }
+
     const restarterFile = './lastRestarter.json'
     if (fs.existsSync(restarterFile)) {
       try {
@@ -114,7 +105,7 @@ async function connectionUpdate(update) {
   }
 }
 
-async function reloadHandler(restart) {
+async function reloadHandler() {
   try {
     const mod = await import(`./handler.js?update=${Date.now()}`)
     handler = mod
