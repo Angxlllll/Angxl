@@ -23,6 +23,8 @@ global.author = global.bot.author
 global.sessions = global.bot.session
 global.banner = global.bot.banner
 
+global.botNumber = '525584393251'
+
 global.APIs = Object.freeze({
   may: 'https://mayapi.ooguy.com'
 })
