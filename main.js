@@ -126,11 +126,15 @@ async function connectionUpdate(update) {
     if (fs.existsSync(file)) {
       try {
         const data = JSON.parse(fs.readFileSync(file, 'utf-8'))
-        if (data?.chatId) {
-          await conn.sendMessage(data.chatId, {
-            text: `✅ *${global.namebot} está en línea nuevamente* 🚀`
-          })
-        }
+        if (data?.chatId && data?.key) {
+  await conn.sendMessage(
+    data.chatId,
+    {
+      text: `✅ *${global.namebot} está en línea nuevamente* 🚀`,
+      edit: data.key
+    }
+  )
+}
         fs.unlinkSync(file)
       } catch {}
     }
