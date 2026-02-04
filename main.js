@@ -72,7 +72,7 @@ const socketOptions = {
     )
   },
   markOnlineOnConnect: false,
-  generateHighQualityLinkPreview: true,
+  generateHighQualityLinkPreview: false,
   syncFullHistory: false,
   getMessage: async key => {
     try {
