@@ -7,8 +7,6 @@ import { promisify } from "util"
 
 const streamPipe = promisify(pipeline)
 
-/* ========= CONFIG ========= */
-
 const AUDIO_API_URL = "https://api-adonix.ultraplus.click/download/ytaudio"
 const AUDIO_API_KEY = "Angxlllll"
 
@@ -18,7 +16,7 @@ const VIDEO_API_KEY = process.env.API_KEY || "Angxll"
 const MAX_MB = 200
 const STREAM_TIMEOUT = 300000
 
-/* ========= UTILS ========= */
+global.playProCache ||= new Map()
 
 const cleanName = t =>
   t.replace(/[^\w\s.-]/gi, "").substring(0, 60)
@@ -37,31 +35,18 @@ function ensureTmp() {
   return tmp
 }
 
-/* ========= CACHE ========= */
-/* clave: chatId -> video */
-global.playProCache ||= new Map()
+const handler = async (m, { conn, args, usedPrefix, command }) => {
 
-/* ========= HANDLER ========= */
+  const sub = (args[0] || "").toLowerCase()
 
-const handler = async (m, { conn, args, command, usedPrefix }) => {
-
-  /* ===== CLICK DE BOTÓN ===== */
-  if (
-    m.mtype === "buttonsResponseMessage" ||
-    m.mtype === "templateButtonReplyMessage"
-  ) {
-    const id =
-      m.msg?.selectedButtonId ||
-      m.msg?.selectedId ||
-      m.text
-
-    if (!id?.startsWith("playpro_")) return
-
+  if (sub === "audio" || sub === "video") {
     const video = global.playProCache.get(m.chat)
-    if (!video) return m.reply("❌ El video ya no está en memoria.")
+    if (!video) {
+      return m.reply("❌ Primero usa:\n" + usedPrefix + "playpro <nombre del video>")
+    }
 
-    if (id === "playpro_audio") {
-      await conn.sendMessage(m.chat, { react: { text: "🎵", key: m.key } })
+    if (sub === "audio") {
+      await m.reply("🎧 Descargando audio...")
 
       try {
         const { data } = await axios.get(AUDIO_API_URL, {
@@ -90,8 +75,8 @@ const handler = async (m, { conn, args, command, usedPrefix }) => {
       return
     }
 
-    if (id === "playpro_video") {
-      await conn.sendMessage(m.chat, { react: { text: "🎬", key: m.key } })
+    if (sub === "video") {
+      await m.reply("🎬 Descargando video...")
 
       try {
         const r = await axios.post(
@@ -116,7 +101,6 @@ const handler = async (m, { conn, args, command, usedPrefix }) => {
           return
         } catch {}
 
-        /* fallback stream */
         const tmp = ensureTmp()
         const file = path.join(tmp, `${Date.now()}.mp4`)
 
@@ -125,7 +109,20 @@ const handler = async (m, { conn, args, command, usedPrefix }) => {
           timeout: STREAM_TIMEOUT
         })
 
-        await streamPipe(res.data, fs.createWriteStream(file))
+        let size = 0
+        const ws = fs.createWriteStream(file)
+
+        res.data.on("data", c => {
+          size += c.length
+          if (size / 1024 / 1024 > MAX_MB) {
+            res.data.destroy()
+            ws.destroy()
+            fs.existsSync(file) && fs.unlinkSync(file)
+            throw new Error("Archivo muy grande")
+          }
+        })
+
+        await streamPipe(res.data, ws)
 
         await conn.sendMessage(
           m.chat,
@@ -141,12 +138,9 @@ const handler = async (m, { conn, args, command, usedPrefix }) => {
     }
   }
 
-  /* ===== COMANDO .playpro ===== */
-  if (command !== "playpro") return
-
   const query = args.join(" ").trim()
   if (!query) {
-    return m.reply(`✳️ Usa:\n${usedPrefix}playpro <nombre del video>`)
+    return m.reply("✳️ Usa:\n" + usedPrefix + "playpro <nombre del video>")
   }
 
   await conn.sendMessage(m.chat, { react: { text: "🔎", key: m.key } })
@@ -165,7 +159,7 @@ const handler = async (m, { conn, args, command, usedPrefix }) => {
 👁️ Vistas: ${formatViews(video.views)}
 ⏳ Duración: ${video.timestamp || "—"}
 
-⬇️ Elige qué deseas descargar
+⬇️ Selecciona una opción
 `.trim()
 
   await conn.sendMessage(
@@ -175,12 +169,12 @@ const handler = async (m, { conn, args, command, usedPrefix }) => {
       caption,
       buttons: [
         {
-          buttonId: "playpro_audio",
+          buttonId: `${usedPrefix}playpro audio`,
           buttonText: { displayText: "🎧 Descargar audio" },
           type: 1
         },
         {
-          buttonId: "playpro_video",
+          buttonId: `${usedPrefix}playpro video`,
           buttonText: { displayText: "🎬 Descargar video" },
           type: 1
         }
