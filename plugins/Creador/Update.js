@@ -4,10 +4,6 @@ import { exec } from 'child_process'
 let handler = async (m, { conn }) => {
   const restarterFile = './lastRestarter.json'
 
-  if (!fs.existsSync(restarterFile)) {
-    fs.writeFileSync(restarterFile, JSON.stringify({ chatId: '' }, null, 2))
-  }
-
   await conn.sendMessage(m.chat, {
     react: { text: '🔄', key: m.key }
   })
@@ -31,7 +27,7 @@ let handler = async (m, { conn }) => {
       )
     }
 
-    await conn.sendMessage(
+    const msg = await conn.sendMessage(
       m.chat,
       {
         text:
@@ -44,15 +40,23 @@ let handler = async (m, { conn }) => {
 
     fs.writeFileSync(
       restarterFile,
-      JSON.stringify({ chatId: m.chat }, null, 2)
+      JSON.stringify(
+        {
+          chatId: m.chat,
+          key: msg.key
+        },
+        null,
+        2
+      )
     )
 
     setTimeout(() => process.exit(1), 3000)
   })
 }
 
-handler.command = ["carga", "update"];
-handler.help = ['𝖴𝗉𝖽𝖺𝗍𝖾']
-handler.tags = ['𝖮𝖶𝖭𝖤𝖱']
+handler.command = ['carga', 'update']
+handler.help = ['Update']
+handler.tags = ['OWNER']
 handler.owner = true
-export default handler;
+
+export default handler
