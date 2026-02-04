@@ -9,18 +9,17 @@ import { promisify } from "util"
 
 const streamPipe = promisify(pipeline)
 
-/* ========= CONFIG ========= */
-
-const AUDIO_API_URL = "https://api-adonix.ultraplus.click/download/ytaudio"
-const AUDIO_API_KEY = "Angxlllll"
+const API_BASE_GLOBAL = (global.APIs?.may || "").replace(/\/+$/, "")
+const API_KEY_GLOBAL = global.APIKeys?.may || ""
 
 const API_BASE_ENV = (process.env.API_BASE || "https://api-sky.ultraplus.click").replace(/\/+$/, "")
 const API_KEY_ENV = process.env.API_KEY || "Angxll"
 
+const AUDIO_API_URL = "https://api-adonix.ultraplus.click/download/ytaudio"
+const AUDIO_API_KEY = "Angxlllll"
+
 const MAX_MB = 200
 const STREAM_TIMEOUT = 300000
-
-/* ========= HELPERS ========= */
 
 const cleanName = t =>
   t.replace(/[^\w\s.-]/gi, "").substring(0, 60)
@@ -39,19 +38,16 @@ function ensureTmp() {
   return tmp
 }
 
-/* ========= AUDIO ========= */
-
 async function sendAudio(conn, m, video) {
+  await m.reply("🎵 Descargando audio...")
+
   const { data } = await axios.get(AUDIO_API_URL, {
     params: { url: video.url, apikey: AUDIO_API_KEY },
     timeout: 20000
   })
 
-  const audioUrl =
-    data?.data?.url ||
-    data?.datos?.url
-
-  if (!audioUrl) throw new Error("Audio no disponible")
+  const audioUrl = data?.data?.url || data?.datos?.url
+  if (!audioUrl) throw 0
 
   await conn.sendMessage(
     m.chat,
@@ -64,19 +60,30 @@ async function sendAudio(conn, m, video) {
   )
 }
 
-/* ========= VIDEO ========= */
+async function sendFast(conn, m, video) {
+  const r = await axios.get(`${API_BASE_GLOBAL}/ytdl`, {
+    params: { url: video.url, type: "mp4", apikey: API_KEY_GLOBAL },
+    timeout: 20000
+  })
 
-async function sendVideo(conn, m, video) {
+  if (!r?.data?.result?.url) throw 0
+
+  await conn.sendMessage(
+    m.chat,
+    { video: { url: r.data.result.url }, mimetype: "video/mp4" },
+    { quoted: m }
+  )
+}
+
+async function sendSafe(conn, m, video) {
   const r = await axios.post(
     `${API_BASE_ENV}/youtube/resolve`,
     { url: video.url, type: "video" },
     { headers: { apikey: API_KEY_ENV } }
   )
 
-  const media = r?.data?.result?.media
-  let dl = media?.dl_download || media?.direct
-  if (!dl) throw new Error("Video no disponible")
-
+  let dl = r?.data?.result?.media?.dl_download || r?.data?.result?.media?.direct
+  if (!dl) throw 0
   if (dl.startsWith("/")) dl = API_BASE_ENV + dl
 
   try {
@@ -105,7 +112,7 @@ async function sendVideo(conn, m, video) {
       res.data.destroy()
       ws.destroy()
       fs.unlinkSync(filePath)
-      throw new Error("Video demasiado grande")
+      throw 0
     }
   })
 
@@ -120,12 +127,7 @@ async function sendVideo(conn, m, video) {
   fs.unlinkSync(filePath)
 }
 
-/* ========= HANDLER ========= */
-
 const handler = async (m, { conn, args, usedPrefix }) => {
-  const text = args.join(" ").trim()
-
-  // 🔘 Respuesta a botones
   if (m.text?.startsWith("PLAYPRO::")) {
     const [, type, url] = m.text.split("::")
     const search = await yts({ videoId: url.split("v=")[1] })
@@ -133,17 +135,22 @@ const handler = async (m, { conn, args, usedPrefix }) => {
     if (!video) return m.reply("❌ Video no encontrado")
 
     try {
-      if (type === "AUDIO") await sendAudio(conn, m, video)
-      if (type === "VIDEO") await sendVideo(conn, m, video)
+      if (type === "AUDIO") return await sendAudio(conn, m, video)
+      if (type === "VIDEO") {
+        await m.reply("🎬 Descargando video...")
+        try {
+          return await sendFast(conn, m, video)
+        } catch {
+          return await sendSafe(conn, m, video)
+        }
+      }
     } catch {
-      m.reply("❌ Error al descargar")
+      return m.reply("❌ Error al descargar")
     }
-    return
   }
 
-  if (!text) {
-    return m.reply(`✳️ Usa:\n${usedPrefix}playpro <nombre del video>`)
-  }
+  const text = args.join(" ").trim()
+  if (!text) return m.reply(`✳️ Usa:\n${usedPrefix}playpro <nombre del video>`)
 
   const search = await yts(text)
   const video = search?.videos?.[0]
@@ -180,6 +187,7 @@ const handler = async (m, { conn, args, usedPrefix }) => {
 }
 
 handler.command = ["playpro"]
+handler.customPrefix = /^PLAYPRO::/
 handler.tags = ["descargas"]
 
 export default handler
