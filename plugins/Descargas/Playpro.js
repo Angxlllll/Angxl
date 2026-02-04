@@ -170,12 +170,12 @@ const handler = async (m, { conn, args, usedPrefix }) => {
       caption,
       buttons: [
         {
-          buttonId: `PLAYPRO::AUDIO::${video.url}`,
+          buttonId: `.PLAYPRO::AUDIO::${video.url}`,
           buttonText: { displayText: "🎵 Descargar audio" },
           type: 1
         },
         {
-          buttonId: `PLAYPRO::VIDEO::${video.url}`,
+          buttonId: `.PLAYPRO::VIDEO::${video.url}`,
           buttonText: { displayText: "🎬 Descargar video" },
           type: 1
         }
