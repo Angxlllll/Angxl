@@ -1,19 +1,16 @@
 import yts from 'yt-search'
 
-let handler = async (m, { conn, args, usedPrefix, command }) => {
-  if (!args[0]) {
-    return conn.reply(m.chat, 'Escribe el nombre de la canción o video', m)
-  }
+let handler = async (m, { conn, args, command }) => {
 
-  let text = args.join(' ')
-  let search = await yts(text)
-  let video = search.videos[0]
+  if (command === 'playpro') {
+    if (!args[0]) return m.reply(m.chat, 'Escribe el nombre de la canción o video', m)
 
-  if (!video) {
-    return conn.reply(m.chat, 'No encontré resultados', m)
-  }
+    let text = args.join(' ')
+    let search = await yts(text)
+    let video = search.videos[0]
+    if (!video) return m.reply(m.chat, 'No encontré resultados', m)
 
-  let caption = `
+    let caption = `
 ✨ ── 『 Play Pro 』 ── ✨
 
 🎵 Título: ${video.title}
@@ -24,59 +21,38 @@ let handler = async (m, { conn, args, usedPrefix, command }) => {
 ⬇️ Selecciona una opción
 `.trim()
 
-  let buttons = [
-    {
-      buttonId: `playpro_audio|${video.url}`,
-      buttonText: { displayText: 'Descargar audio' },
-      type: 1
-    },
-    {
-      buttonId: `playpro_video|${video.url}`,
-      buttonText: { displayText: 'Descargar video' },
-      type: 1
-    }
-  ]
-
-  await conn.sendMessage(
-    m.chat,
-    {
+    return await conn.sendMessage(m.chat, {
       image: { url: video.thumbnail },
       caption,
-      buttons,
       footer: 'Angel bot',
+      buttons: [
+        { buttonId: `.playproaudio ${video.url}`, buttonText: { displayText: 'Descargar audio' }, type: 1 },
+        { buttonId: `.playprovideo ${video.url}`, buttonText: { displayText: 'Descargar video' }, type: 1 }
+      ],
       headerType: 4
-    },
-    { quoted: m }
-  )
-}
+    }, { quoted: m })
+  }
 
-handler.before = async (m, { conn }) => {
-  if (!m.message?.buttonsResponseMessage) return
-
-  let id = m.message.buttonsResponseMessage.selectedButtonId
-  if (!id) return
-
-  let [action, url] = id.split('|')
-  if (!url) return
-
-  if (action === 'playpro_audio') {
-    await conn.reply(m.chat, 'Descargando audio', m)
-    await conn.sendMessage(m.chat, {
-      audio: { url: `https://api.dorratz.com/v2/audio?url=${url}` },
+  if (command === 'playproaudio') {
+    if (!args[0]) return
+    await m.reply(m.chat, 'Descargando audio', m)
+    return await conn.sendMessage(m.chat, {
+      audio: { url: `https://api.dorratz.com/v2/audio?url=${args[0]}` },
       mimetype: 'audio/mpeg'
     }, { quoted: m })
   }
 
-  if (action === 'playpro_video') {
-    await conn.reply(m.chat, 'Descargando video', m)
-    await conn.sendMessage(m.chat, {
-      video: { url: `https://api.dorratz.com/v2/video?url=${url}` },
+  if (command === 'playprovideo') {
+    if (!args[0]) return
+    await m.reply(m.chat, 'Descargando video', m)
+    return await conn.sendMessage(m.chat, {
+      video: { url: `https://api.dorratz.com/v2/video?url=${args[0]}` },
       mimetype: 'video/mp4'
     }, { quoted: m })
   }
 }
 
-handler.command = ['playpro']
+handler.command = ['playpro', 'playproaudio', 'playprovideo']
 handler.tags = ['descargas']
 handler.help = ['playpro <texto>']
 
