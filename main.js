@@ -30,7 +30,7 @@ const { version } = await fetchLatestBaileysVersion()
 const msgRetryCounterCache = new NodeCache()
 const userDevicesCache = new NodeCache()
 
-const connectionOptions = {
+const conn = makeWASocket({
   logger: pino({ level: 'fatal' }),
   printQRInTerminal: false,
   browser: ['Android', 'Chrome', '13'],
@@ -54,29 +54,28 @@ const connectionOptions = {
   userDevicesCache,
   version,
   keepAliveIntervalMs: 60000
-}
+})
 
-global.conn = makeWASocket(connectionOptions)
+global.conn = conn
+
+if (!fs.existsSync(`./${sessions}/creds.json`)) {
+  const phone = String(global.botNumber || '').replace(/\D/g, '')
+  if (!phone) {
+    console.error('Falta global.botNumber')
+    process.exit(1)
+  }
+  const code = await conn.requestPairingCode(phone)
+  console.log(`Ingresa este código en el número global: ${code.match(/.{1,4}/g).join(' ')}`)
+}
 
 let handler = await import('./handler.js')
 let isInit = true
-let pairingDone = false
 
 async function connectionUpdate(update) {
   const { connection, lastDisconnect } = update
   const reason = lastDisconnect?.error?.output?.statusCode
 
   if (connection === 'open') {
-    if (!pairingDone && !fs.existsSync(`./${sessions}/creds.json`)) {
-      pairingDone = true
-      try {
-        const phone = String(global.botNumber || '').replace(/\D/g, '')
-        await new Promise(r => setTimeout(r, 1500))
-        const code = await conn.requestPairingCode(phone)
-        console.log(code.match(/.{1,4}/g).join(' '))
-      } catch {}
-    }
-
     const restarterFile = './lastRestarter.json'
     if (fs.existsSync(restarterFile)) {
       try {
@@ -112,9 +111,9 @@ async function reloadHandler() {
   } catch {}
 
   if (!isInit) {
-    conn.ev.off('messages.upsert', conn.handler)
-    conn.ev.off('connection.update', conn.connectionUpdate)
-    conn.ev.off('creds.update', conn.credsUpdate)
+    conn.ev.removeAllListeners('messages.upsert')
+    conn.ev.removeAllListeners('connection.update')
+    conn.ev.removeAllListeners('creds.update')
   }
 
   conn.handler = handler.handler.bind(conn)
@@ -123,12 +122,25 @@ async function reloadHandler() {
 
   conn.ev.on('messages.upsert', async ({ messages, type }) => {
     if (type !== 'notify') return
-    for (const msg of messages || []) {
-      if (!msg?.message || msg.key.fromMe) continue
-      try {
-        conn.handler({ messages: [msg] })
-      } catch {}
-    }
+
+    const msg = messages[0]
+    if (!msg) return
+    if (!msg.message) return
+    if (msg.key.fromMe) return
+
+    const jid = msg.key.remoteJid
+    if (jid === 'status@broadcast') return
+
+    const text =
+      msg.message.conversation ||
+      msg.message.extendedTextMessage?.text ||
+      ''
+
+    if (!global.prefixes.some(p => text.startsWith(p))) return
+
+    try {
+      await conn.handler({ messages: [msg] })
+    } catch {}
   })
 
   conn.ev.on('connection.update', conn.connectionUpdate)
@@ -145,12 +157,11 @@ global.plugins = {}
 async function loadPlugins(dir) {
   for (const f of fs.readdirSync(dir)) {
     const full = path.join(dir, f)
-    if (f.endsWith('.js')) {
-      try {
-        const m = await import(`${full}?update=${Date.now()}`)
-        global.plugins[full] = m.default || m
-      } catch {}
-    }
+    if (!f.endsWith('.js')) continue
+    try {
+      const m = await import(`${full}?update=${Date.now()}`)
+      global.plugins[full] = m.default || m
+    } catch {}
   }
 }
 
