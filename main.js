@@ -5,7 +5,6 @@ import path from 'path'
 import readline from 'readline'
 import chalk from 'chalk'
 import pino from 'pino'
-import syntaxerror from 'syntax-error'
 import NodeCache from 'node-cache'
 import yargs from 'yargs'
 import { fileURLToPath } from 'url'
@@ -18,15 +17,12 @@ const {
   DisconnectReason,
   useMultiFileAuthState,
   fetchLatestBaileysVersion,
-  makeCacheableSignalKeyStore,
-  jidNormalizedUser
+  makeCacheableSignalKeyStore
 } = baileys
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
-global.opts = yargs(process.argv.slice(2))
-  .exitProcess(false)
-  .parse()
+global.opts = yargs(process.argv.slice(2)).exitProcess(false).parse()
 
 global.prefixes = Object.freeze(
   Array.isArray(global.prefixes) ? global.prefixes : ['.', '!', '#', '/']
@@ -64,7 +60,7 @@ let handler = await import('./handler.js')
 let isInit = true
 
 async function startSock() {
-  const socketOptions = {
+  const sock = makeWASocket({
     logger: pino({ level: 'silent' }),
     printQRInTerminal: option === '1',
     browser: option === '2'
@@ -84,19 +80,18 @@ async function startSock() {
     userDevicesCache,
     version,
     keepAliveIntervalMs: 55000
-  }
+  })
 
-  global.conn = makeWASocket(socketOptions)
+  global.conn = sock
+  store.bind(sock)
 
-  store.bind(conn)
-  conn.ev.on('creds.update', saveCreds)
+  sock.ev.on('creds.update', saveCreds)
 
   if (option === '2' && !fs.existsSync(`./${SESSION_DIR}/creds.json`)) {
     console.log(chalk.cyanBright('\nIngresa tu número con código país\n'))
     phoneNumber = await question('--> ')
     const clean = phoneNumber.replace(/\D/g, '')
-    const code = await conn.requestPairingCode(clean)
-
+    const code = await sock.requestPairingCode(clean)
     console.log(chalk.greenBright('\nIngresa este código:\n'))
     console.log(chalk.bold(code.match(/.{1,4}/g).join(' ')))
   }
@@ -106,9 +101,8 @@ async function startSock() {
     const reason = lastDisconnect?.error?.output?.statusCode
 
     if (connection === 'open') {
-      console.log(
-        chalk.greenBright(`✿ Conectado a ${conn.user?.name || 'Bot'}`)
-      )
+      console.log(chalk.greenBright(`✿ Conectado a ${sock.user?.name || 'Bot'}`))
+    }
 
       const file = './lastRestarter.json'
       if (fs.existsSync(file)) {
@@ -134,8 +128,7 @@ async function startSock() {
         process.exit(0)
       }
 
-      if (conn?.ws?.readyState !== 1) {
-        console.log(chalk.yellow('Reconectando...'))
+      if (sock.ws?.readyState !== 1) {
         setTimeout(startSock, 2000)
       }
     }
@@ -143,43 +136,32 @@ async function startSock() {
 
   async function reloadHandler() {
     try {
-      const mod = await import(`./handler.js?update=${Date.now()}`)
-      handler = mod
+      handler = await import(`./handler.js?update=${Date.now()}`)
     } catch {}
 
     if (!isInit) {
-  if (typeof conn.handler === 'function') {
-    conn.ev.off('messages.upsert', conn.handler)
-  }
-  if (typeof conn.connectionUpdate === 'function') {
-    conn.ev.off('connection.update', conn.connectionUpdate)
-  }
-  if (typeof conn.credsUpdate === 'function') {
-    conn.ev.off('creds.update', conn.credsUpdate)
-  }
-}
+      sock.ev.off('messages.upsert', sock._handler)
+      sock.ev.off('connection.update', sock._connUpdate)
+      sock.ev.off('creds.update', saveCreds)
+    }
 
-    conn.handler = handler.handler.bind(conn)
-    conn.connectionUpdate = connectionUpdate.bind(conn)
-    conn.credsUpdate = saveCreds.bind(conn)
-
-    conn.ev.on('messages.upsert', async ({ messages, type }) => {
+    sock._handler = async ({ messages, type }) => {
       if (type !== 'notify') return
-
-      for (const msg of messages || []) {
-        if (!msg?.message) continue
-        if (msg.key?.fromMe) continue
-
+      for (const msg of messages) {
+        if (!msg?.message || msg.key?.fromMe) continue
         try {
-          conn.handler({ messages: [msg] })
+          handler.handler.call(sock, { messages: [msg] })
         } catch (e) {
           console.error(e)
         }
       }
-    })
+    }
 
-    conn.ev.on('connection.update', conn.connectionUpdate)
-    conn.ev.on('creds.update', conn.credsUpdate)
+    sock._connUpdate = connectionUpdate
+
+    sock.ev.on('messages.upsert', sock._handler)
+    sock.ev.on('connection.update', sock._connUpdate)
+    sock.ev.on('creds.update', saveCreds)
 
     isInit = false
   }
@@ -222,7 +204,6 @@ for (const plugin of Object.values(global.plugins)) {
 
   let cmds = plugin.command
   if (!cmds) continue
-  if (cmds instanceof RegExp) continue
   if (!Array.isArray(cmds)) cmds = [cmds]
 
   for (const c of cmds) {
@@ -236,30 +217,23 @@ for (const plugin of Object.values(global.plugins)) {
 const reloadTimers = new Map()
 
 fs.watch(pluginRoot, { recursive: true }, (_, file) => {
-  if (!file || !file.endsWith('.js')) return
-
+  if (!file?.endsWith('.js')) return
   const full = path.join(pluginRoot, file)
+
   clearTimeout(reloadTimers.get(full))
-
-  reloadTimers.set(
-    full,
-    setTimeout(async () => {
-      if (!fs.existsSync(full)) {
-        delete global.plugins[full]
-        return
-      }
-
-      try {
-        const m = await import(`${full}?update=${Date.now()}`)
-        global.plugins[full] = m.default || m
-        console.log(chalk.yellowBright(`↻ Plugin recargado: ${file}`))
-      } catch (e) {
-        console.error(e)
-      }
-    }, 150)
-  )
+  reloadTimers.set(full, setTimeout(async () => {
+    if (!fs.existsSync(full)) {
+      delete global.plugins[full]
+      return
+    }
+    try {
+      const m = await import(`${full}?update=${Date.now()}`)
+      global.plugins[full] = m.default || m
+      console.log(chalk.yellowBright(`↻ Plugin recargado: ${file}`))
+    } catch (e) {
+      console.error(e)
+    }
+  }, 120))
 })
 
-process.on('uncaughtException', err => {
-  console.error(err)
-})
+process.on('uncaughtException', console.error)
