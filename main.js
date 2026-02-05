@@ -102,16 +102,6 @@ if (option === '2' && !fs.existsSync(`./${SESSION_DIR}/creds.json`)) {
   console.log(chalk.bold(code.match(/.{1,4}/g).join(' ')))
 }
 
-await new Promise(resolve => {
-  const wait = u => {
-    if (u.connection === 'open') {
-      conn.ev.off('connection.update', wait)
-      resolve()
-    }
-  }
-  conn.ev.on('connection.update', wait)
-})
-
 let handler = await import('./handler.js')
 let isInit = true
 
