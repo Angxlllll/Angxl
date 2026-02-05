@@ -3,10 +3,13 @@ import fetch from 'node-fetch'
 let handler = async (m, { conn }) => {
   if (!m.text || !m.isGroup) return
 
-  const mentioned = m.mentionedJid || []
-  const botJid = conn.user?.id
+  const mentioned = (m.mentionedJid || []).map(j =>
+    j.replace(/\D/g, '')
+  )
 
-  if (!mentioned.includes(botJid)) return
+  const botNumber = (conn.user?.id || '').replace(/\D/g, '')
+
+  if (!mentioned.includes(botNumber)) return
 
   let text = m.text.replace(/@\S+/g, '').trim()
   if (!text) {
