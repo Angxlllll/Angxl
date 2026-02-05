@@ -8,10 +8,17 @@ let handler = async (m, { conn }) => {
   )
 
   const botNumber = (conn.user?.id || '').replace(/\D/g, '')
+  const botName = (conn.user?.name || '').toLowerCase()
+  const textLower = m.text.toLowerCase()
 
-  if (!mentioned.includes(botNumber)) return
+  const isRealMention = mentioned.includes(botNumber)
+  const isTextMention =
+    textLower.startsWith('@bot') ||
+    (botName && textLower.startsWith(`@${botName}`))
 
-  let text = m.text.replace(/@\S+/g, '').trim()
+  if (!isRealMention && !isTextMention) return
+
+  let text = m.text.replace(/^@\S+/i, '').trim()
   if (!text) {
     await m.reply('hola si')
     return
