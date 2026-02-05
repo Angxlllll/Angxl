@@ -148,10 +148,16 @@ async function startSock() {
     } catch {}
 
     if (!isInit) {
-      conn.ev.off('messages.upsert', conn.handler)
-      conn.ev.off('connection.update', conn.connectionUpdate)
-      conn.ev.off('creds.update', conn.credsUpdate)
-    }
+  if (typeof conn.handler === 'function') {
+    conn.ev.off('messages.upsert', conn.handler)
+  }
+  if (typeof conn.connectionUpdate === 'function') {
+    conn.ev.off('connection.update', conn.connectionUpdate)
+  }
+  if (typeof conn.credsUpdate === 'function') {
+    conn.ev.off('creds.update', conn.credsUpdate)
+  }
+}
 
     conn.handler = handler.handler.bind(conn)
     conn.connectionUpdate = connectionUpdate.bind(conn)
