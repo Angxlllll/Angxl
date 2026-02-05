@@ -183,10 +183,6 @@ async function startSock() {
 
 await startSock()
 
-/* =========================
-   PLUGINS
-========================= */
-
 const pluginRoot = path.join(__dirname, 'plugins')
 global.plugins = {}
 
