@@ -166,8 +166,7 @@ async function startSock() {
     isInit = false
   }
 
-  await reloadHandler()
-}
+await reloadHandler()
 
 await startSock()
 
