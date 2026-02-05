@@ -38,8 +38,7 @@ global.dfail = async (type, m, conn) => {
     restrict: '𝖤𝗌𝗍𝖾 𝖢𝗈𝗆𝖺𝗇𝖽𝗈 𝖧𝖺 𝖲𝗂𝖽𝗈 𝖣𝖾𝗌𝖺𝖻𝗂𝗅𝗂𝗍𝖺𝖽𝗈'
   }[type]
 
-  if (!msg) return
-  conn.sendMessage(m.chat, { text: msg }, { quoted: m })
+  if (msg) await conn.sendMessage(m.chat, { text: msg }, { quoted: m })
 }
 
 global.groupMetaCache ||= new Map()
@@ -97,16 +96,9 @@ async function handleMessage(m) {
 
   const textMsg = m.text
   const prefixes = getPrefixes()
-
   let parsed = parseCommand(textMsg, prefixes)
 
-if (!parsed) {
-  parsed = {
-    usedPrefix: '',
-    command: null,
-    args: []
-  }
-}
+  if (!parsed) parsed = { usedPrefix: '', command: null, args: [] }
 
   const { command, args, usedPrefix } = parsed
 
@@ -114,15 +106,28 @@ if (!parsed) {
   const isROwner = OWNER_NUMBERS.includes(senderNum)
   const isOwner = isROwner || m.fromMe
 
+  const pluginIndex = global.pluginCommandIndex
+  let pluginsToCheck = []
+
+  if (command && pluginIndex?.has(command)) {
+    pluginsToCheck = pluginIndex.get(command)
+  } else {
+    const customs = global._customPrefixPlugins
+    if (!customs || !customs.length) return
+    for (const p of customs) {
+      if (p.customPrefix?.test(textMsg)) pluginsToCheck.push(p)
+    }
+    if (!pluginsToCheck.length) return
+  }
+
   let groupMetadata
-  let participants
+  let participants = []
   let isAdmin = false
   let isBotAdmin = !m.isGroup
 
   const loadGroupData = async () => {
     if (!m.isGroup) return
     let cached = getCachedGroupMeta(m.chat)
-
     if (!cached) {
       const meta = await this.groupMetadata(m.chat)
       const raw = meta.participants || []
@@ -156,37 +161,19 @@ if (!parsed) {
     isBotAdmin = cached.adminNums.has(DIGITS(botJid))
   }
 
-  for (const plugin of Object.values(global.plugins)) {
+  for (const plugin of pluginsToCheck) {
     if (!plugin || plugin.disabled) continue
-
-    let accept = false
-
-    if (plugin.customPrefix instanceof RegExp)
-      accept = plugin.customPrefix.test(textMsg)
-    else if (plugin.command)
-      accept =
-        plugin.command instanceof RegExp
-          ? plugin.command.test(command)
-          : Array.isArray(plugin.command)
-          ? plugin.command.includes(command)
-          : plugin.command === command
-
-    if (!accept) continue
 
     if (plugin.group && !m.isGroup) {
       global.dfail('group', m, this)
       continue
     }
 
-    const needsGroupMeta =
+    const needsMeta =
       m.isGroup &&
       (plugin.group || plugin.admin || plugin.botAdmin)
 
-    if (needsGroupMeta && !groupMetadata) {
-      await loadGroupData()
-    }
-
-    participants = m.isGroup ? participants : []
+    if (needsMeta && !groupMetadata) await loadGroupData()
 
     if (plugin.rowner && !isROwner) {
       global.dfail('rowner', m, this)
@@ -217,7 +204,7 @@ if (!parsed) {
 
     if (!exec) continue
 
-    setImmediate(async () => {
+    queueMicrotask(async () => {
       try {
         await exec.call(this, m, {
           conn: this,
@@ -232,8 +219,8 @@ if (!parsed) {
           isBotAdmin,
           chat: m.chat
         })
-      } catch (err) {
-        console.error('[PLUGIN ERROR]', plugin?.name || command, err)
+      } catch (e) {
+        console.error('[PLUGIN ERROR]', plugin?.name || command, e)
       }
     })
 
