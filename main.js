@@ -128,41 +128,34 @@ async function connectionUpdate(update) {
       try {
         const data = JSON.parse(fs.readFileSync(file, 'utf-8'))
         if (data?.chatId && data?.key) {
-  await conn.sendMessage(
-    data.chatId,
-    {
-      text: `✅ *${global.namebot} está en línea nuevamente* 🚀`,
-      edit: data.key
-    }
-  )
-}
+          await conn.sendMessage(
+            data.chatId,
+            {
+              text: `✅ *${global.namebot} está en línea nuevamente* 🚀`,
+              edit: data.key
+            }
+          )
+        }
         fs.unlinkSync(file)
       } catch {}
     }
   }
 
   if (connection === 'close') {
-    if (reason !== DisconnectReason.loggedOut) {
-      try {
-        conn.ev.removeAllListeners()
-      } catch {}
-      await reloadHandler(true)
+    if (reason === DisconnectReason.loggedOut) {
+      console.log(chalk.red('Sesión cerrada'))
+      process.exit(0)
     }
+
+    console.log(chalk.yellow('Reconectando...'))
   }
 }
 
-async function reloadHandler(restart) {
+async function reloadHandler() {
   try {
     const mod = await import(`./handler.js?update=${Date.now()}`)
     handler = mod
   } catch {}
-
-  if (restart) {
-    try { conn.ws.close() } catch {}
-    conn.ev.removeAllListeners()
-    global.conn = makeWASocket(socketOptions)
-    isInit = true
-  }
 
   if (!isInit) {
     conn.ev.off('messages.upsert', conn.handler)
@@ -235,7 +228,7 @@ fs.watch(pluginRoot, { recursive: true }, (_, file) => {
         global.plugins[full] = m.default || m
         console.log(chalk.yellowBright(`↻ Plugin recargado: ${file}`))
       } catch (e) {
-        console.error(`Error recargando ${file}`, e)
+        console.error(e)
       }
     }, 150)
   )
