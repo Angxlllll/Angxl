@@ -93,6 +93,15 @@ const socketOptions = {
 global.conn = makeWASocket(socketOptions)
 conn.ev.on('creds.update', saveCreds)
 
+if (option === '2' && !fs.existsSync(`./${SESSION_DIR}/creds.json`)) {
+  console.log(chalk.cyanBright('\nIngresa tu número con código país\n'))
+  phoneNumber = await question('--> ')
+  const clean = phoneNumber.replace(/\D/g, '')
+  const code = await conn.requestPairingCode(clean)
+  console.log(chalk.greenBright('\nIngresa este código:\n'))
+  console.log(chalk.bold(code.match(/.{1,4}/g).join(' ')))
+}
+
 await new Promise(resolve => {
   const wait = u => {
     if (u.connection === 'open' || u.connection === 'connecting') {
@@ -102,15 +111,6 @@ await new Promise(resolve => {
   }
   conn.ev.on('connection.update', wait)
 })
-
-if (option === '2') {
-  console.log(chalk.cyanBright('\nIngresa tu número con código país\n'))
-  phoneNumber = await question('--> ')
-  const clean = phoneNumber.replace(/\D/g, '')
-  const code = await conn.requestPairingCode(clean)
-  console.log(chalk.greenBright('\nIngresa este código:\n'))
-  console.log(chalk.bold(code.match(/.{1,4}/g).join(' ')))
-}
 
 let handler = await import('./handler.js')
 let isInit = true
@@ -147,7 +147,6 @@ async function connectionUpdate(update) {
       console.log(chalk.red('Sesión cerrada'))
       process.exit(0)
     }
-
     console.log(chalk.yellow('Reconectando...'))
   }
 }
@@ -220,9 +219,7 @@ for (const plugin of Object.values(global.plugins)) {
 
   let cmds = plugin.command
   if (!cmds) continue
-
   if (cmds instanceof RegExp) continue
-
   if (!Array.isArray(cmds)) cmds = [cmds]
 
   for (const c of cmds) {
@@ -247,7 +244,6 @@ fs.watch(pluginRoot, { recursive: true }, (_, file) => {
         delete global.plugins[full]
         return
       }
-
       try {
         const m = await import(`${full}?update=${Date.now()}`)
         global.plugins[full] = m.default || m
