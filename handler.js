@@ -94,31 +94,39 @@ async function handleMessage(m) {
   m = smsg(this, m)
   if (!m || m.isBaileys || !m.text) return
 
-  const textMsg = m.text
   const prefixes = getPrefixes()
-  let parsed = parseCommand(textMsg, prefixes)
+  const parsed = parseCommand(m.text, prefixes)
 
-  if (!parsed) parsed = { usedPrefix: '', command: null, args: [] }
-
-  const { command, args, usedPrefix } = parsed
+  const command = parsed?.command || null
+  const args = parsed?.args || []
+  const usedPrefix = parsed?.usedPrefix || ''
 
   const senderNum = DIGITS(m.sender)
   const isROwner = OWNER_NUMBERS.includes(senderNum)
   const isOwner = isROwner || m.fromMe
 
-  const pluginIndex = global.pluginCommandIndex
-  let pluginsToCheck = []
+  const candidates = []
+  const added = new Set()
 
-  if (command && pluginIndex?.has(command)) {
-    pluginsToCheck = pluginIndex.get(command)
-  } else {
-    const customs = global._customPrefixPlugins
-    if (!customs || !customs.length) return
-    for (const p of customs) {
-      if (p.customPrefix?.test(textMsg)) pluginsToCheck.push(p)
+  if (command && global.pluginCommandIndex?.has(command)) {
+    for (const p of global.pluginCommandIndex.get(command)) {
+      if (!added.has(p)) {
+        added.add(p)
+        candidates.push(p)
+      }
     }
-    if (!pluginsToCheck.length) return
   }
+
+  if (global._customPrefixPlugins?.length) {
+    for (const p of global._customPrefixPlugins) {
+      if (p.customPrefix?.test(m.text) && !added.has(p)) {
+        added.add(p)
+        candidates.push(p)
+      }
+    }
+  }
+
+  if (!candidates.length) return
 
   let groupMetadata
   let participants = []
@@ -161,12 +169,12 @@ async function handleMessage(m) {
     isBotAdmin = cached.adminNums.has(DIGITS(botJid))
   }
 
-  for (const plugin of pluginsToCheck) {
+  for (const plugin of candidates) {
     if (!plugin || plugin.disabled) continue
 
     if (plugin.group && !m.isGroup) {
       global.dfail('group', m, this)
-      continue
+      return
     }
 
     const needsMeta =
@@ -177,22 +185,22 @@ async function handleMessage(m) {
 
     if (plugin.rowner && !isROwner) {
       global.dfail('rowner', m, this)
-      continue
+      return
     }
 
     if (plugin.owner && !isOwner) {
       global.dfail('owner', m, this)
-      continue
+      return
     }
 
     if (plugin.botAdmin && !isBotAdmin) {
       global.dfail('botAdmin', m, this)
-      continue
+      return
     }
 
     if (plugin.admin && !isAdmin) {
       global.dfail('admin', m, this)
-      continue
+      return
     }
 
     const exec =
