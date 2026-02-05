@@ -91,6 +91,7 @@ const socketOptions = {
 }
 
 global.conn = makeWASocket(socketOptions)
+conn.ev.on('creds.update', saveCreds)
 
 await new Promise(resolve => {
   const wait = u => {
