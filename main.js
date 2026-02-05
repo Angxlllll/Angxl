@@ -91,7 +91,7 @@ const socketOptions = {
 }
 
 global.conn = makeWASocket(socketOptions)
-store.bind(conn.ev)
+store.bind(conn)
 conn.ev.on('creds.update', saveCreds)
 
 if (option === '2' && !fs.existsSync(`./${SESSION_DIR}/creds.json`)) {
