@@ -207,6 +207,30 @@ async function loadPlugins(dir) {
 
 await loadPlugins(pluginRoot)
 
+global.pluginCommandIndex = new Map()
+global._customPrefixPlugins = []
+
+for (const plugin of Object.values(global.plugins)) {
+  if (!plugin || plugin.disabled) continue
+
+  if (plugin.customPrefix instanceof RegExp) {
+    global._customPrefixPlugins.push(plugin)
+  }
+
+  let cmds = plugin.command
+  if (!cmds) continue
+
+  if (cmds instanceof RegExp) continue
+
+  if (!Array.isArray(cmds)) cmds = [cmds]
+
+  for (const c of cmds) {
+    if (!global.pluginCommandIndex.has(c))
+      global.pluginCommandIndex.set(c, [])
+    global.pluginCommandIndex.get(c).push(plugin)
+  }
+}
+
 const reloadTimers = new Map()
 
 fs.watch(pluginRoot, { recursive: true }, (_, file) => {
