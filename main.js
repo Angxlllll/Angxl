@@ -19,13 +19,14 @@ const {
   useMultiFileAuthState,
   fetchLatestBaileysVersion,
   makeCacheableSignalKeyStore,
-  jidNormalizedUser,
-  Browsers
+  jidNormalizedUser
 } = baileys
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
-global.opts = yargs(process.argv.slice(2)).exitProcess(false).parse()
+global.opts = yargs(process.argv.slice(2))
+  .exitProcess(false)
+  .parse()
 
 global.prefixes = Object.freeze(
   Array.isArray(global.prefixes) ? global.prefixes : ['.', '!', '#', '/']
@@ -68,7 +69,7 @@ async function startSock() {
     printQRInTerminal: option === '1',
     browser: option === '2'
       ? ['Android', 'Chrome', '13']
-      : Browsers.macOS('Desktop'),
+      : ['Desktop', 'Chrome', '120'],
     auth: {
       creds: state.creds,
       keys: makeCacheableSignalKeyStore(
@@ -78,16 +79,7 @@ async function startSock() {
     },
     markOnlineOnConnect: false,
     generateHighQualityLinkPreview: false,
-    syncFullHistory: false,
-    getMessage: async key => {
-      try {
-        const jid = jidNormalizedUser(key.remoteJid)
-        const msg = await store.loadMessage(jid, key.id)
-        return msg?.message || ''
-      } catch {
-        return ''
-      }
-    },
+    getMessage: async () => '',
     msgRetryCounterCache,
     userDevicesCache,
     version,
@@ -95,6 +87,7 @@ async function startSock() {
   }
 
   global.conn = makeWASocket(socketOptions)
+
   store.bind(conn)
   conn.ev.on('creds.update', saveCreds)
 
@@ -103,6 +96,7 @@ async function startSock() {
     phoneNumber = await question('--> ')
     const clean = phoneNumber.replace(/\D/g, '')
     const code = await conn.requestPairingCode(clean)
+
     console.log(chalk.greenBright('\nIngresa este código:\n'))
     console.log(chalk.bold(code.match(/.{1,4}/g).join(' ')))
   }
@@ -139,8 +133,11 @@ async function startSock() {
         console.log(chalk.red('Sesión cerrada'))
         process.exit(0)
       }
-      console.log(chalk.yellow('Reconectando...'))
-      setTimeout(startSock, 2000)
+
+      if (conn?.ws?.readyState !== 1) {
+        console.log(chalk.yellow('Reconectando...'))
+        setTimeout(startSock, 2000)
+      }
     }
   }
 
@@ -162,12 +159,16 @@ async function startSock() {
 
     conn.ev.on('messages.upsert', async ({ messages, type }) => {
       if (type !== 'notify') return
+
       for (const msg of messages || []) {
         if (!msg?.message) continue
         if (msg.key?.fromMe) continue
+
         try {
           conn.handler({ messages: [msg] })
-        } catch {}
+        } catch (e) {
+          console.error(e)
+        }
       }
     })
 
@@ -182,6 +183,10 @@ async function startSock() {
 
 await startSock()
 
+/* =========================
+   PLUGINS
+========================= */
+
 const pluginRoot = path.join(__dirname, 'plugins')
 global.plugins = {}
 
@@ -194,7 +199,9 @@ async function loadPlugins(dir) {
       try {
         const m = await import(`${full}?update=${Date.now()}`)
         global.plugins[full] = m.default || m
-      } catch {}
+      } catch (e) {
+        console.error(e)
+      }
     }
   }
 }
@@ -217,8 +224,9 @@ for (const plugin of Object.values(global.plugins)) {
   if (!Array.isArray(cmds)) cmds = [cmds]
 
   for (const c of cmds) {
-    if (!global.pluginCommandIndex.has(c))
+    if (!global.pluginCommandIndex.has(c)) {
       global.pluginCommandIndex.set(c, [])
+    }
     global.pluginCommandIndex.get(c).push(plugin)
   }
 }
@@ -238,11 +246,14 @@ fs.watch(pluginRoot, { recursive: true }, (_, file) => {
         delete global.plugins[full]
         return
       }
+
       try {
         const m = await import(`${full}?update=${Date.now()}`)
         global.plugins[full] = m.default || m
         console.log(chalk.yellowBright(`↻ Plugin recargado: ${file}`))
-      } catch {}
+      } catch (e) {
+        console.error(e)
+      }
     }, 150)
   )
 })
