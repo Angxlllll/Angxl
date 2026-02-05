@@ -104,7 +104,7 @@ if (option === '2' && !fs.existsSync(`./${SESSION_DIR}/creds.json`)) {
 
 await new Promise(resolve => {
   const wait = u => {
-    if (u.connection === 'open' || u.connection === 'connecting') {
+    if (u.connection === 'open') {
       conn.ev.off('connection.update', wait)
       resolve()
     }
@@ -174,9 +174,7 @@ async function reloadHandler() {
       if (msg.key?.fromMe) continue
       try {
         conn.handler({ messages: [msg] })
-      } catch (e) {
-        console.error(e)
-      }
+      } catch {}
     }
   })
 
@@ -248,9 +246,7 @@ fs.watch(pluginRoot, { recursive: true }, (_, file) => {
         const m = await import(`${full}?update=${Date.now()}`)
         global.plugins[full] = m.default || m
         console.log(chalk.yellowBright(`↻ Plugin recargado: ${file}`))
-      } catch (e) {
-        console.error(e)
-      }
+      } catch {}
     }, 150)
   )
 })
