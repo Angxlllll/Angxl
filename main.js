@@ -62,6 +62,7 @@ if (!option && !phoneNumber && !fs.existsSync(`./${SESSION_DIR}/creds.json`)) {
 const socketOptions = {
   logger: pino({ level: 'silent' }),
   printQRInTerminal: option === '1',
+  mobile: option === '2',
   browser: option === '2'
   ? ['Android', 'Baileys', '1.0.0']
   : Browsers.macOS('Desktop'),
