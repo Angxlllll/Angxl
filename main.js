@@ -59,124 +59,128 @@ if (!option && !phoneNumber && !fs.existsSync(`./${SESSION_DIR}/creds.json`)) {
   } while (!/^[12]$/.test(option))
 }
 
-const socketOptions = {
-  logger: pino({ level: 'silent' }),
-  printQRInTerminal: option === '1',
-  mobile: option === '2',
-  browser: option === '2'
-  ? ['Android', 'Baileys', '1.0.0']
-  : Browsers.macOS('Desktop'),
-  auth: {
-    creds: state.creds,
-    keys: makeCacheableSignalKeyStore(
-      state.keys,
-      pino({ level: 'fatal' })
-    )
-  },
-  markOnlineOnConnect: false,
-  generateHighQualityLinkPreview: false,
-  syncFullHistory: false,
-  getMessage: async key => {
-    try {
-      const jid = jidNormalizedUser(key.remoteJid)
-      const msg = await store.loadMessage(jid, key.id)
-      return msg?.message || ''
-    } catch {
-      return ''
-    }
-  },
-  msgRetryCounterCache,
-  userDevicesCache,
-  version,
-  keepAliveIntervalMs: 55000
-}
-
-global.conn = makeWASocket(socketOptions)
-store.bind(conn)
-conn.ev.on('creds.update', saveCreds)
-
-if (option === '2' && !fs.existsSync(`./${SESSION_DIR}/creds.json`)) {
-  console.log(chalk.cyanBright('\nIngresa tu número con código país\n'))
-  phoneNumber = await question('--> ')
-  const clean = phoneNumber.replace(/\D/g, '')
-  const code = await conn.requestPairingCode(clean)
-  console.log(chalk.greenBright('\nIngresa este código:\n'))
-  console.log(chalk.bold(code.match(/.{1,4}/g).join(' ')))
-}
-
 let handler = await import('./handler.js')
 let isInit = true
 
-async function connectionUpdate(update) {
-  const { connection, lastDisconnect } = update
-  const reason = lastDisconnect?.error?.output?.statusCode
-
-  if (connection === 'open') {
-    console.log(
-      chalk.greenBright(`✿ Conectado a ${conn.user?.name || 'Bot'}`)
-    )
-
-    const file = './lastRestarter.json'
-    if (fs.existsSync(file)) {
+async function startSock() {
+  const socketOptions = {
+    logger: pino({ level: 'silent' }),
+    printQRInTerminal: option === '1',
+    browser: option === '2'
+      ? ['Android', 'Chrome', '13']
+      : Browsers.macOS('Desktop'),
+    auth: {
+      creds: state.creds,
+      keys: makeCacheableSignalKeyStore(
+        state.keys,
+        pino({ level: 'fatal' })
+      )
+    },
+    markOnlineOnConnect: false,
+    generateHighQualityLinkPreview: false,
+    syncFullHistory: false,
+    getMessage: async key => {
       try {
-        const data = JSON.parse(fs.readFileSync(file, 'utf-8'))
-        if (data?.chatId && data?.key) {
-          await conn.sendMessage(
-            data.chatId,
-            {
-              text: `✅ *${global.namebot} está en línea nuevamente* 🚀`,
-              edit: data.key
-            }
-          )
-        }
-        fs.unlinkSync(file)
-      } catch {}
+        const jid = jidNormalizedUser(key.remoteJid)
+        const msg = await store.loadMessage(jid, key.id)
+        return msg?.message || ''
+      } catch {
+        return ''
+      }
+    },
+    msgRetryCounterCache,
+    userDevicesCache,
+    version,
+    keepAliveIntervalMs: 55000
+  }
+
+  global.conn = makeWASocket(socketOptions)
+  store.bind(conn)
+  conn.ev.on('creds.update', saveCreds)
+
+  if (option === '2' && !fs.existsSync(`./${SESSION_DIR}/creds.json`)) {
+    console.log(chalk.cyanBright('\nIngresa tu número con código país\n'))
+    phoneNumber = await question('--> ')
+    const clean = phoneNumber.replace(/\D/g, '')
+    const code = await conn.requestPairingCode(clean)
+    console.log(chalk.greenBright('\nIngresa este código:\n'))
+    console.log(chalk.bold(code.match(/.{1,4}/g).join(' ')))
+  }
+
+  async function connectionUpdate(update) {
+    const { connection, lastDisconnect } = update
+    const reason = lastDisconnect?.error?.output?.statusCode
+
+    if (connection === 'open') {
+      console.log(
+        chalk.greenBright(`✿ Conectado a ${conn.user?.name || 'Bot'}`)
+      )
+
+      const file = './lastRestarter.json'
+      if (fs.existsSync(file)) {
+        try {
+          const data = JSON.parse(fs.readFileSync(file, 'utf-8'))
+          if (data?.chatId && data?.key) {
+            await conn.sendMessage(
+              data.chatId,
+              {
+                text: `✅ *${global.namebot} está en línea nuevamente* 🚀`,
+                edit: data.key
+              }
+            )
+          }
+          fs.unlinkSync(file)
+        } catch {}
+      }
+    }
+
+    if (connection === 'close') {
+      if (reason === DisconnectReason.loggedOut) {
+        console.log(chalk.red('Sesión cerrada'))
+        process.exit(0)
+      }
+      console.log(chalk.yellow('Reconectando...'))
+      setTimeout(startSock, 2000)
     }
   }
 
-  if (connection === 'close') {
-    if (reason === DisconnectReason.loggedOut) {
-      console.log(chalk.red('Sesión cerrada'))
-      process.exit(0)
+  async function reloadHandler() {
+    try {
+      const mod = await import(`./handler.js?update=${Date.now()}`)
+      handler = mod
+    } catch {}
+
+    if (!isInit) {
+      conn.ev.off('messages.upsert', conn.handler)
+      conn.ev.off('connection.update', conn.connectionUpdate)
+      conn.ev.off('creds.update', conn.credsUpdate)
     }
-    console.log(chalk.yellow('Reconectando...'))
+
+    conn.handler = handler.handler.bind(conn)
+    conn.connectionUpdate = connectionUpdate.bind(conn)
+    conn.credsUpdate = saveCreds.bind(conn)
+
+    conn.ev.on('messages.upsert', async ({ messages, type }) => {
+      if (type !== 'notify') return
+      for (const msg of messages || []) {
+        if (!msg?.message) continue
+        if (msg.key?.fromMe) continue
+        try {
+          conn.handler({ messages: [msg] })
+        } catch {}
+      }
+    })
+
+    conn.ev.on('connection.update', conn.connectionUpdate)
+    conn.ev.on('creds.update', conn.credsUpdate)
+
+    isInit = false
   }
+
+  await reloadHandler()
 }
 
-async function reloadHandler() {
-  try {
-    const mod = await import(`./handler.js?update=${Date.now()}`)
-    handler = mod
-  } catch {}
-
-  if (!isInit) {
-    conn.ev.off('messages.upsert', conn.handler)
-    conn.ev.off('connection.update', conn.connectionUpdate)
-    conn.ev.off('creds.update', conn.credsUpdate)
-  }
-
-  conn.handler = handler.handler.bind(conn)
-  conn.connectionUpdate = connectionUpdate.bind(conn)
-  conn.credsUpdate = saveCreds.bind(conn)
-
-  conn.ev.on('messages.upsert', async ({ messages, type }) => {
-    if (type !== 'notify') return
-    for (const msg of messages || []) {
-      if (!msg?.message) continue
-      if (msg.key?.fromMe) continue
-      try {
-        conn.handler({ messages: [msg] })
-      } catch {}
-    }
-  })
-
-  conn.ev.on('connection.update', conn.connectionUpdate)
-  conn.ev.on('creds.update', conn.credsUpdate)
-
-  isInit = false
-}
-
-await reloadHandler()
+await startSock()
 
 const pluginRoot = path.join(__dirname, 'plugins')
 global.plugins = {}
