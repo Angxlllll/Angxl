@@ -102,14 +102,13 @@ async function startSock() {
 
     if (connection === 'open') {
       console.log(chalk.greenBright(`✿ Conectado a ${sock.user?.name || 'Bot'}`))
-    }
 
       const file = './lastRestarter.json'
       if (fs.existsSync(file)) {
         try {
           const data = JSON.parse(fs.readFileSync(file, 'utf-8'))
           if (data?.chatId && data?.key) {
-            await conn.sendMessage(
+            await sock.sendMessage(
               data.chatId,
               {
                 text: `✅ *${global.namebot} está en línea nuevamente* 🚀`,
@@ -166,7 +165,8 @@ async function startSock() {
     isInit = false
   }
 
-await reloadHandler()
+  await reloadHandler()
+}
 
 await startSock()
 
