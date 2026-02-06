@@ -128,7 +128,6 @@ fs.watch(pluginRoot, { recursive: true }, (_, file) => {
 })
 
 let handler = await import('./handler.js')
-let isInit = true
 
 async function startSock() {
   const sock = makeWASocket({
@@ -146,11 +145,11 @@ async function startSock() {
     },
     markOnlineOnConnect: false,
     generateHighQualityLinkPreview: true,
-    getMessage: async () => '',
+    getMessage: async () => undefined,
     msgRetryCounterCache,
     userDevicesCache,
     version,
-    keepAliveIntervalMs: 55_000
+    keepAliveIntervalMs: 55000
   })
 
   global.conn = sock
@@ -167,7 +166,7 @@ async function startSock() {
     console.log(chalk.bold(code.match(/.{1,4}/g).join(' ')))
   }
 
-  const onConnectionUpdate = update => {
+  function onConnectionUpdate(update) {
     const { connection, lastDisconnect } = update
     const reason = lastDisconnect?.error?.output?.statusCode
 
@@ -184,30 +183,29 @@ async function startSock() {
     }
   }
 
+  function onMessagesUpsert({ messages, type }) {
+    if (type !== 'notify') return
+    for (const msg of messages) {
+      if (!msg?.message) continue
+      if (msg.key?.fromMe) continue
+      if (msg.key?.id?.startsWith('BAE5')) continue
+      handler.handler.call(sock, { messages: [msg] })
+    }
+  }
+
   async function reloadHandler() {
     try {
       handler = await import(`./handler.js?update=${Date.now()}`)
     } catch {}
 
-    if (!isInit) {
-      sock.ev.off('messages.upsert', sock._handler)
-      sock.ev.off('connection.update', sock._connUpdate)
-    }
+    if (sock._handler) sock.ev.off('messages.upsert', sock._handler)
+    if (sock._connUpdate) sock.ev.off('connection.update', sock._connUpdate)
 
-    sock._handler = ({ messages, type }) => {
-      if (type !== 'notify') return
-      for (const msg of messages) {
-        if (!msg?.message || msg.key?.fromMe) continue
-        handler.handler.call(sock, { messages: [msg] })
-      }
-    }
-
+    sock._handler = onMessagesUpsert
     sock._connUpdate = onConnectionUpdate
 
     sock.ev.on('messages.upsert', sock._handler)
     sock.ev.on('connection.update', sock._connUpdate)
-
-    isInit = false
   }
 
   await reloadHandler()
@@ -216,4 +214,9 @@ async function startSock() {
 await loadPlugins(pluginRoot)
 await startSock()
 
-process.on('uncaughtException', console.error)
+process.on('uncaughtException', err => {
+  console.error('[UNCAUGHT]', err)
+})
+process.on('unhandledRejection', err => {
+  console.error('[UNHANDLED]', err)
+})
