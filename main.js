@@ -16,6 +16,7 @@ const {
   makeWASocket,
   DisconnectReason,
   useMultiFileAuthState,
+  fetchLatestBaileysVersion,
   makeCacheableSignalKeyStore
 } = baileys
 
@@ -30,18 +31,10 @@ global.prefixes = Object.freeze(
 
 const SESSION_DIR = global.sessions || 'sessions'
 const { state, saveCreds } = await useMultiFileAuthState(SESSION_DIR)
+const { version } = await fetchLatestBaileysVersion()
 
-const version = [2, 3000, 1015901307]
-
-const msgRetryCounterCache = new NodeCache({
-  stdTTL: 30,
-  checkperiod: 60
-})
-
-const userDevicesCache = new NodeCache({
-  stdTTL: 120,
-  checkperiod: 300
-})
+const msgRetryCounterCache = new NodeCache({ stdTTL: 30 })
+const userDevicesCache = new NodeCache({ stdTTL: 120 })
 
 const rl = readline.createInterface({
   input: process.stdin,
@@ -100,43 +93,12 @@ async function loadPlugins(dir) {
     if (fs.statSync(full).isDirectory()) {
       await loadPlugins(full)
     } else if (f.endsWith('.js')) {
-      try {
-        const m = await import(`${full}?update=${Date.now()}`)
-        global.plugins[full] = m.default || m
-      } catch (e) {
-        console.error('[PLUGIN LOAD ERROR]', f, e)
-      }
+      const m = await import(`${full}?update=${Date.now()}`)
+      global.plugins[full] = m.default || m
     }
   }
   rebuildPluginIndex()
 }
-
-const reloadTimers = new Map()
-
-fs.watch(pluginRoot, { recursive: true }, (_, file) => {
-  if (!file?.endsWith('.js')) return
-  const full = path.join(pluginRoot, file)
-
-  clearTimeout(reloadTimers.get(full))
-  reloadTimers.set(
-    full,
-    setTimeout(async () => {
-      if (!fs.existsSync(full)) {
-        delete global.plugins[full]
-        rebuildPluginIndex()
-        return
-      }
-      try {
-        const m = await import(`${full}?update=${Date.now()}`)
-        global.plugins[full] = m.default || m
-        rebuildPluginIndex()
-        console.log(chalk.yellowBright(`↻ Plugin recargado: ${file}`))
-      } catch (e) {
-        console.error('[PLUGIN RELOAD ERROR]', file, e)
-      }
-    }, 150)
-  )
-})
 
 let handler = await import('./handler.js')
 
@@ -170,14 +132,22 @@ async function startSock() {
 
   sock.ev.on('creds.update', saveCreds)
 
-  if (option === '2' && !fs.existsSync(`./${SESSION_DIR}/creds.json`)) {
-    console.log(chalk.cyanBright('\nIngresa tu número con código país\n'))
-    phoneNumber = await question('--> ')
-    const clean = phoneNumber.replace(/\D/g, '')
-    const code = await sock.requestPairingCode(clean)
-    console.log(chalk.greenBright('\nIngresa este código:\n'))
-    console.log(chalk.bold(code.match(/.{1,4}/g).join(' ')))
-  }
+  sock.ev.once('connection.update', async ({ connection }) => {
+    if (
+      connection === 'open' &&
+      option === '2' &&
+      !fs.existsSync(`./${SESSION_DIR}/creds.json`)
+    ) {
+      if (!phoneNumber) {
+        console.log(chalk.cyanBright('\nIngresa tu número con código país\n'))
+        phoneNumber = await question('--> ')
+      }
+      const clean = phoneNumber.replace(/\D/g, '')
+      const code = await sock.requestPairingCode(clean)
+      console.log(chalk.greenBright('\nIngresa este código:\n'))
+      console.log(chalk.bold(code.match(/.{1,4}/g).join(' ')))
+    }
+  })
 
   function onConnectionUpdate(update) {
     const { connection, lastDisconnect } = update
@@ -215,9 +185,7 @@ async function startSock() {
   }
 
   async function reloadHandler() {
-    try {
-      handler = await import(`./handler.js?update=${Date.now()}`)
-    } catch {}
+    handler = await import(`./handler.js?update=${Date.now()}`)
 
     if (sock._handler) sock.ev.off('messages.upsert', sock._handler)
     if (sock._connUpdate) sock.ev.off('connection.update', sock._connUpdate)
