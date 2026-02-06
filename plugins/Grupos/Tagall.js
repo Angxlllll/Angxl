@@ -107,7 +107,7 @@ const getFlag = jid => {
 }
 
 const handler = async (m, { conn, participants }) => {
-  await conn.sendMessage(m.chat, {
+  conn.sendMessage(m.chat, {
     react: { text: '🗣️', key: m.key }
   })
 
@@ -118,8 +118,10 @@ const handler = async (m, { conn, participants }) => {
     const jid = p.jid || p.id
     if (!jid || !jid.includes('@')) continue
 
+    const user = jid.split('@')[0]
     const flag = getFlag(jid)
-    lines.push(`┊» ${flag} @${jid.split('@')[0]}`)
+
+    lines.push(`┊» ${flag} @${user}`)
     mentions.push(jid)
   }
 
