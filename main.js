@@ -132,12 +132,16 @@ async function startSock() {
 
   sock.ev.on('creds.update', saveCreds)
 
-  sock.ev.once('connection.update', async ({ connection }) => {
+  let pairingRequested = false
+
+  sock.ev.on('connection.update', async ({ connection }) => {
     if (
       connection === 'open' &&
       option === '2' &&
+      !pairingRequested &&
       !fs.existsSync(`./${SESSION_DIR}/creds.json`)
     ) {
+      pairingRequested = true
       if (!phoneNumber) {
         console.log(chalk.cyanBright('\nIngresa tu número con código país\n'))
         phoneNumber = await question('--> ')
