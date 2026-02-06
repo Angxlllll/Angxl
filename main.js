@@ -21,26 +21,25 @@ const {
 } = baileys
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-
 global.opts = yargs(process.argv.slice(2)).exitProcess(false).parse()
 
 global.prefixes = Object.freeze(
-  Array.isArray(global.prefixes) ? global.prefixes : ['.', '!', '#', '/']
+  Array.isArray(global.prefixes)
+    ? global.prefixes
+    : ['.', '!', '#', '/']
 )
 
 const SESSION_DIR = global.sessions || 'sessions'
-
 const { state, saveCreds } = await useMultiFileAuthState(SESSION_DIR)
 const { version } = await fetchLatestBaileysVersion()
 
-const msgRetryCounterCache = new NodeCache()
-const userDevicesCache = new NodeCache()
+const msgRetryCounterCache = new NodeCache({ stdTTL: 60 })
+const userDevicesCache = new NodeCache({ stdTTL: 300 })
 
 const rl = readline.createInterface({
   input: process.stdin,
   output: process.stdout
 })
-
 const question = q => new Promise(r => rl.question(q, r))
 
 let option = process.argv.includes('qr') ? '1' : null
@@ -55,6 +54,78 @@ if (!option && !phoneNumber && !fs.existsSync(`./${SESSION_DIR}/creds.json`)) {
     )
   } while (!/^[12]$/.test(option))
 }
+
+const pluginRoot = path.join(__dirname, 'plugins')
+global.plugins = Object.create(null)
+global.pluginCommandIndex = new Map()
+global._customPrefixPlugins = []
+
+function rebuildPluginIndex() {
+  global.pluginCommandIndex.clear()
+  global._customPrefixPlugins.length = 0
+
+  for (const plugin of Object.values(global.plugins)) {
+    if (!plugin || plugin.disabled) continue
+
+    if (plugin.customPrefix instanceof RegExp) {
+      global._customPrefixPlugins.push(plugin)
+    }
+
+    let cmds = plugin.command
+    if (!cmds) continue
+    if (!Array.isArray(cmds)) cmds = [cmds]
+
+    for (const c of cmds) {
+      let arr = global.pluginCommandIndex.get(c)
+      if (!arr) {
+        arr = []
+        global.pluginCommandIndex.set(c, arr)
+      }
+      arr.push(plugin)
+    }
+  }
+}
+
+async function loadPlugins(dir) {
+  for (const f of fs.readdirSync(dir)) {
+    const full = path.join(dir, f)
+    if (fs.statSync(full).isDirectory()) {
+      await loadPlugins(full)
+    } else if (f.endsWith('.js')) {
+      try {
+        const m = await import(`${full}?update=${Date.now()}`)
+        global.plugins[full] = m.default || m
+      } catch (e) {
+        console.error('[PLUGIN LOAD ERROR]', f, e)
+      }
+    }
+  }
+  rebuildPluginIndex()
+}
+
+const reloadTimers = new Map()
+
+fs.watch(pluginRoot, { recursive: true }, (_, file) => {
+  if (!file?.endsWith('.js')) return
+  const full = path.join(pluginRoot, file)
+
+  clearTimeout(reloadTimers.get(full))
+  reloadTimers.set(full, setTimeout(async () => {
+    if (!fs.existsSync(full)) {
+      delete global.plugins[full]
+      rebuildPluginIndex()
+      return
+    }
+    try {
+      const m = await import(`${full}?update=${Date.now()}`)
+      global.plugins[full] = m.default || m
+      rebuildPluginIndex()
+      console.log(chalk.yellowBright(`↻ Plugin recargado: ${file}`))
+    } catch (e) {
+      console.error('[PLUGIN RELOAD ERROR]', file, e)
+    }
+  }, 150))
+})
 
 let handler = await import('./handler.js')
 let isInit = true
@@ -79,7 +150,7 @@ async function startSock() {
     msgRetryCounterCache,
     userDevicesCache,
     version,
-    keepAliveIntervalMs: 55000
+    keepAliveIntervalMs: 55_000
   })
 
   global.conn = sock
@@ -96,29 +167,12 @@ async function startSock() {
     console.log(chalk.bold(code.match(/.{1,4}/g).join(' ')))
   }
 
-  async function connectionUpdate(update) {
+  const onConnectionUpdate = update => {
     const { connection, lastDisconnect } = update
     const reason = lastDisconnect?.error?.output?.statusCode
 
     if (connection === 'open') {
       console.log(chalk.greenBright(`✿ Conectado a ${sock.user?.name || 'Bot'}`))
-
-      const file = './lastRestarter.json'
-      if (fs.existsSync(file)) {
-        try {
-          const data = JSON.parse(fs.readFileSync(file, 'utf-8'))
-          if (data?.chatId && data?.key) {
-            await sock.sendMessage(
-              data.chatId,
-              {
-                text: `✅ *${global.namebot} está en línea nuevamente* 🚀`,
-                edit: data.key
-              }
-            )
-          }
-          fs.unlinkSync(file)
-        } catch {}
-      }
     }
 
     if (connection === 'close') {
@@ -126,10 +180,7 @@ async function startSock() {
         console.log(chalk.red('Sesión cerrada'))
         process.exit(0)
       }
-
-      if (sock.ws?.readyState !== 1) {
-        setTimeout(startSock, 2000)
-      }
+      setTimeout(startSock, 2000)
     }
   }
 
@@ -139,32 +190,22 @@ async function startSock() {
     } catch {}
 
     if (!isInit) {
-  if (typeof sock._handler === 'function') {
-    sock.ev.off('messages.upsert', sock._handler)
-  }
-  if (typeof sock._connUpdate === 'function') {
-    sock.ev.off('connection.update', sock._connUpdate)
-  }
-  sock.ev.off('creds.update', saveCreds)
-}
+      sock.ev.off('messages.upsert', sock._handler)
+      sock.ev.off('connection.update', sock._connUpdate)
+    }
 
-    sock._handler = async ({ messages, type }) => {
+    sock._handler = ({ messages, type }) => {
       if (type !== 'notify') return
       for (const msg of messages) {
         if (!msg?.message || msg.key?.fromMe) continue
-        try {
-          handler.handler.call(sock, { messages: [msg] })
-        } catch (e) {
-          console.error(e)
-        }
+        handler.handler.call(sock, { messages: [msg] })
       }
     }
 
-    sock._connUpdate = connectionUpdate
+    sock._connUpdate = onConnectionUpdate
 
     sock.ev.on('messages.upsert', sock._handler)
     sock.ev.on('connection.update', sock._connUpdate)
-    sock.ev.on('creds.update', saveCreds)
 
     isInit = false
   }
@@ -172,71 +213,7 @@ async function startSock() {
   await reloadHandler()
 }
 
-await startSock()
-
-const pluginRoot = path.join(__dirname, 'plugins')
-global.plugins = {}
-
-async function loadPlugins(dir) {
-  for (const f of fs.readdirSync(dir)) {
-    const full = path.join(dir, f)
-    if (fs.statSync(full).isDirectory()) {
-      await loadPlugins(full)
-    } else if (f.endsWith('.js')) {
-      try {
-        const m = await import(`${full}?update=${Date.now()}`)
-        global.plugins[full] = m.default || m
-      } catch (e) {
-        console.error(e)
-      }
-    }
-  }
-}
-
 await loadPlugins(pluginRoot)
-
-global.pluginCommandIndex = new Map()
-global._customPrefixPlugins = []
-
-for (const plugin of Object.values(global.plugins)) {
-  if (!plugin || plugin.disabled) continue
-
-  if (plugin.customPrefix instanceof RegExp) {
-    global._customPrefixPlugins.push(plugin)
-  }
-
-  let cmds = plugin.command
-  if (!cmds) continue
-  if (!Array.isArray(cmds)) cmds = [cmds]
-
-  for (const c of cmds) {
-    if (!global.pluginCommandIndex.has(c)) {
-      global.pluginCommandIndex.set(c, [])
-    }
-    global.pluginCommandIndex.get(c).push(plugin)
-  }
-}
-
-const reloadTimers = new Map()
-
-fs.watch(pluginRoot, { recursive: true }, (_, file) => {
-  if (!file?.endsWith('.js')) return
-  const full = path.join(pluginRoot, file)
-
-  clearTimeout(reloadTimers.get(full))
-  reloadTimers.set(full, setTimeout(async () => {
-    if (!fs.existsSync(full)) {
-      delete global.plugins[full]
-      return
-    }
-    try {
-      const m = await import(`${full}?update=${Date.now()}`)
-      global.plugins[full] = m.default || m
-      console.log(chalk.yellowBright(`↻ Plugin recargado: ${file}`))
-    } catch (e) {
-      console.error(e)
-    }
-  }, 120))
-})
+await startSock()
 
 process.on('uncaughtException', console.error)
