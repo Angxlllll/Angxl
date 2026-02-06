@@ -1,42 +1,54 @@
 const handler = async (m, { conn, participants }) => {
-  const user =
+  const target =
     m.mentionedJid?.[0] ||
     m.quoted?.sender
 
-  if (!user)
-    return m.reply('☁️ *Responde o menciona al usuario*.')
+  if (!target)
+    return conn.sendMessage(
+      m.chat,
+      { text: '☁️ *Responde o menciona al usuario*.' },
+      { quoted: m }
+    )
 
-  const participant = participants.find(p => p.id === user)
+  let participant
+  for (let i = 0, l = participants.length; i < l; i++) {
+    if (participants[i].id === target) {
+      participant = participants[i]
+      break
+    }
+  }
+
   if (!participant)
-    return m.reply('❌ Usuario no encontrado en el grupo.')
-
-  const username = user.split('@')[0]
+    return conn.sendMessage(
+      m.chat,
+      { text: '❌ Usuario no encontrado en el grupo.' },
+      { quoted: m }
+    )
 
   if (participant.admin)
     return conn.sendMessage(
       m.chat,
       {
-        text: `ℹ️ @${username} *ya era admin*.`,
-        mentions: [user]
+        text: `ℹ️ @${target.slice(0, target.indexOf('@'))} *ya era admin*.`,
+        mentions: [target]
       },
       { quoted: m }
     )
 
-  try {
-    await conn.groupParticipantsUpdate(m.chat, [user], 'promote')
+  await conn.groupParticipantsUpdate(
+    m.chat,
+    [target],
+    'promote'
+  )
 
-    await conn.sendMessage(
-      m.chat,
-      {
-        text: `✅ *Admin dado a:* @${username}`,
-        mentions: [user]
-      },
-      { quoted: m }
-    )
-  } catch (e) {
-    console.error('[PROMOTE ERROR]', e)
-    await m.reply('❌ Error al dar admin.')
-  }
+  return conn.sendMessage(
+    m.chat,
+    {
+      text: `✅ *Admin dado a:* @${target.slice(0, target.indexOf('@'))}`,
+      mentions: [target]
+    },
+    { quoted: m }
+  )
 }
 
 handler.group = true
