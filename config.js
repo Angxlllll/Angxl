@@ -1,13 +1,13 @@
 import { fileURLToPath } from 'url'
 
-global.owner = Object.freeze([
+const OWNER = Object.freeze([
   '5714222810',
   '159606034665538',
   '3264846290995',
   '205819731832938'
 ])
 
-global.bot = Object.freeze({
+const BOT = Object.freeze({
   name: '𝖠𝗇𝗀𝖾𝗅 𝖡𝗈𝗍',
   alias: '𝖠𝗇𝗀𝖾𝗅 𝖡𝗈𝗍',
   packname: '𝖠𝗇𝗀𝖾𝗅 𝖡𝗈𝗍',
@@ -16,19 +16,25 @@ global.bot = Object.freeze({
   banner: 'https://files.catbox.moe/0fer0y.jpg'
 })
 
-global.namebot = global.bot.name
-global.botname = global.bot.alias
-global.packname = global.bot.packname
-global.author = global.bot.author
-global.sessions = global.bot.session
-global.banner = global.bot.banner
-
-global.APIs = Object.freeze({
+const APIS = Object.freeze({
   may: 'https://mayapi.ooguy.com'
 })
 
-global.APIKeys = Object.freeze({
+const API_KEYS = Object.freeze({
   may: process.env.MAY_API_KEY ?? 'may-684934ab'
 })
+
+global.owner = OWNER
+global.bot = BOT
+
+global.namebot = BOT.name
+global.botname = BOT.alias
+global.packname = BOT.packname
+global.author = BOT.author
+global.sessions = BOT.session
+global.banner = BOT.banner
+
+global.APIs = APIS
+global.APIKeys = API_KEYS
 
 global.__filename = path => fileURLToPath(path)
