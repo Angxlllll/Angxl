@@ -46,5 +46,4 @@ const handler = async (m, { conn }) => {
 
 handler.customPrefix = /^\.?(link|damelink)$/i
 handler.group = true
-handler.botAdmin = true
 export default handler
