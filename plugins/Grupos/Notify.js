@@ -1,130 +1,126 @@
 import {
   getContentType,
   downloadContentFromMessage
-} from "@whiskeysockets/baileys"
+} from '@whiskeysockets/baileys'
 
-function unwrapMessage(m) {
+function unwrap(m) {
   let n = m
-  while (
-    n?.viewOnceMessage?.message ||
-    n?.viewOnceMessageV2?.message ||
-    n?.viewOnceMessageV2Extension?.message ||
-    n?.ephemeralMessage?.message
-  ) {
+  while (n) {
     n =
       n.viewOnceMessage?.message ||
       n.viewOnceMessageV2?.message ||
       n.viewOnceMessageV2Extension?.message ||
-      n.ephemeralMessage?.message
+      n.ephemeralMessage?.message ||
+      n
+    if (n === m) break
   }
   return n
 }
 
-function getQuoted(msg) {
-  const root = unwrapMessage(msg.message) || {}
-  const ctx =
-    root.extendedTextMessage?.contextInfo ||
-    root.imageMessage?.contextInfo ||
-    root.videoMessage?.contextInfo ||
-    root.documentMessage?.contextInfo ||
-    root.audioMessage?.contextInfo ||
-    root.stickerMessage?.contextInfo ||
-    null
-
-  return ctx?.quotedMessage
-    ? unwrapMessage(ctx.quotedMessage)
-    : null
-}
-
 async function streamToBuffer(stream) {
+  if (!stream) return Buffer.alloc(0)
   const chunks = []
   for await (const c of stream) chunks.push(c)
   return Buffer.concat(chunks)
 }
 
-const handler = async (m, { conn, args, participants = [] }) => {
-  const text = args.join(" ").trim()
-  const quoted = getQuoted(m)
+const handler = async (m, { conn, args, participants }) => {
+  const text = args.length ? args.join(' ') : ''
+  const root = unwrap(m.message)
 
-  let msg = null
+  let source = null
+  let sourceType = null
 
-  const direct = unwrapMessage(m.message)
-  const directType = getContentType(direct)
-
-  if (
-    directType &&
-    directType !== "conversation" &&
-    directType !== "extendedTextMessage"
-  ) {
-    const buffer = await streamToBuffer(
-      await downloadContentFromMessage(
-        direct[directType],
-        directType.replace("Message", "")
-      )
-    )
-
-    if (directType === "audioMessage") {
-      msg = {
-        audio: buffer,
-        mimetype: direct.audioMessage?.mimetype || "audio/mpeg",
-        ptt: false
-      }
-    } else {
-      msg = {
-        [directType.replace("Message", "")]: buffer,
-        caption: text || undefined
-      }
+  if (root) {
+    sourceType = getContentType(root)
+    if (
+      sourceType &&
+      sourceType !== 'conversation' &&
+      sourceType !== 'extendedTextMessage'
+    ) {
+      source = root[sourceType]
     }
   }
 
-  else if (quoted) {
-    const type = getContentType(quoted)
-
-    if (type === "conversation" || type === "extendedTextMessage") {
-      msg = {
-        text:
-          quoted.conversation ||
-          quoted.extendedTextMessage?.text
-      }
-    } else {
-      const buffer = await streamToBuffer(
-        await downloadContentFromMessage(
-          quoted[type],
-          type.replace("Message", "")
-        )
-      )
-
-      if (type === "audioMessage") {
-        msg = {
-          audio: buffer,
-          mimetype: quoted.audioMessage?.mimetype || "audio/mpeg",
-          ptt: false
-        }
+  if (!source && m.quoted) {
+    const q = unwrap(m.quoted.message)
+    if (q) {
+      sourceType = getContentType(q)
+      if (
+        sourceType &&
+        sourceType !== 'conversation' &&
+        sourceType !== 'extendedTextMessage'
+      ) {
+        source = q[sourceType]
       } else {
-        msg = {
-          [type.replace("Message", "")]: buffer,
-          caption: text || undefined
+        const qtext =
+          q.conversation ||
+          q.extendedTextMessage?.text
+        if (qtext) {
+          return conn.sendMessage(
+            m.chat,
+            {
+              text: qtext,
+              contextInfo: {
+                mentionedJid: participants.map(p => p.id),
+                forwardingScore: 1,
+                isForwarded: true
+              }
+            },
+            { quoted: m }
+          )
         }
       }
     }
   }
 
-  else if (text) {
-    msg = { text }
+  if (!source && text) {
+    return conn.sendMessage(
+      m.chat,
+      {
+        text,
+        contextInfo: {
+          mentionedJid: participants.map(p => p.id),
+          forwardingScore: 1,
+          isForwarded: true
+        }
+      },
+      { quoted: m }
+    )
   }
 
-  if (!msg) {
+  if (!source) {
     return m.reply(
-      "❌ *Uso incorrecto*\n\n" +
-      "• `.n texto`\n" +
-      "• Responde a un mensaje con `.n`"
+      '❌ *Uso incorrecto*\n\n• `.n texto`\n• Responde a un mensaje con `.n`'
     )
+  }
+
+  const media = await streamToBuffer(
+    await downloadContentFromMessage(
+      source,
+      sourceType.replace('Message', '')
+    )
+  )
+
+  let payload
+
+  if (sourceType === 'audioMessage') {
+    payload = {
+      audio: media,
+      mimetype: source.mimetype || 'audio/mpeg',
+      ptt: false
+    }
+  } else {
+    payload = {
+      [sourceType.replace('Message', '')]: media,
+      caption: text || undefined
+    }
   }
 
   await conn.sendMessage(
     m.chat,
     {
-      ...msg,
+      ...payload,
       contextInfo: {
         mentionedJid: participants.map(p => p.id),
         forwardingScore: 1,
@@ -135,10 +131,10 @@ const handler = async (m, { conn, args, participants = [] }) => {
   )
 }
 
-handler.command = ["n", "tag", "notify"]
+handler.command = ['n', 'tag', 'notify']
 handler.group = true
 handler.admin = true
-handler.help = ["Notify"]
-handler.tags = ["Grupos"]
+handler.help = ['Notify']
+handler.tags = ['Grupos']
 
 export default handler
