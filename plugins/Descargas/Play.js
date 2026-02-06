@@ -1,111 +1,99 @@
 import fetch from 'node-fetch'
 import yts from 'yt-search'
-import Jimp from 'jimp'
-import axios from 'axios'
 
-async function resizeImage(buffer, size = 300) {
-  try {
-    const img = await Jimp.read(buffer)
-    return img.resize(size, size).getBufferAsync(Jimp.MIME_JPEG)
-  } catch {
-    return buffer
-  }
-}
+const DL_CACHE = new Map()
+const CACHE_TTL = 10 * 60_000
 
-const savenowApi = {
-  key: 'dfcb6d76f2f6a9894gjkege8a4ab232222',
-  agent: 'Mozilla/5.0 (Android 13)',
-  referer: 'https://y2down.cc/enSB/',
-
-  async ytdl(url, format) {
-    const res = await fetch(
-      `https://p.savenow.to/ajax/download.php?copyright=0&format=${format}&url=${encodeURIComponent(url)}&api=${this.key}`,
-      { headers: { 'User-Agent': this.agent, Referer: this.referer } }
-    )
-    const json = await res.json()
-    if (!json.success) return null
-
-    for (let i = 0; i < 20; i++) {
-      await new Promise(r => setTimeout(r, 1500))
-      const p = await fetch(`https://p.savenow.to/api/progress?id=${json.id}`)
-      const j = await p.json()
-      if (j.progress === 1000) return j.download_url
-    }
+function cacheGet(k) {
+  const v = DL_CACHE.get(k)
+  if (!v) return null
+  if (Date.now() - v.t > CACHE_TTL) {
+    DL_CACHE.delete(k)
     return null
-  },
-
-  async download(url) {
-    return (
-      await this.ytdl(url, 'mp3') ||
-      await this.ytdl(url, 'm4a')
-    )
   }
+  return v.url
 }
 
-async function downloadWithFallback(url) {
-  let link = await savenowApi.download(url)
-  if (link) return link
+function cacheSet(k, url) {
+  DL_CACHE.set(k, { url, t: Date.now() })
+}
 
-  try {
-    const r = await axios.get(
-      `https://scrapers.hostrta.win/scraper/24?url=${encodeURIComponent(url)}`,
-      { timeout: 15000 }
-    )
-    return r.data?.audio?.url || null
-  } catch {}
+function withTimeout(p, ms) {
+  return Promise.race([
+    p,
+    new Promise(r => setTimeout(() => r(null), ms))
+  ])
+}
 
-  try {
-    const r = await axios.get(
-      `https://youtube-downloader-api.vercel.app/info?url=${encodeURIComponent(url)}`,
-      { timeout: 10000 }
-    )
-    return r.data?.data?.formats?.find(f => f.mimeType?.includes('audio'))?.url || null
-  } catch {}
+const savenow = async url => {
+  const res = await fetch(`https://p.savenow.to/ajax/download.php?format=mp3&url=${encodeURIComponent(url)}`)
+  const json = await res.json()
+  if (!json?.id) return null
 
+  for (let i = 0; i < 10; i++) {
+    await new Promise(r => setTimeout(r, 1500))
+    const p = await fetch(`https://p.savenow.to/api/progress?id=${json.id}`)
+    const j = await p.json()
+    if (j?.download_url) return j.download_url
+  }
   return null
 }
 
-const handler = async (m, { conn, args }) => {
-  const query = args.join(' ')
-  if (!query) {
-    return m.reply(
-      '❗ Usa el comando así:\n\n.play nombre de la canción'
-    )
-  }
-
-  m.reply('⏳ Descargando audio...')
-
-  try {
-    const search = await yts(query)
-    const video = search.videos?.[0]
-    if (!video) throw 'No encontré resultados'
-
-    const audioUrl = await downloadWithFallback(video.url)
-    if (!audioUrl) throw 'No pude descargar el audio'
-
-    const thumb = await resizeImage(
-      await (await fetch(video.thumbnail)).buffer()
-    )
-
-    await conn.sendMessage(
-      m.chat,
-      {
-        audio: { url: audioUrl },
-        mimetype: 'audio/mpeg',
-        fileName: `${video.title}.mp3`,
-        jpegThumbnail: thumb
-      },
-      { quoted: m }
-    )
-  } catch (e) {
-    return m.reply(
-      typeof e === 'string' ? e : '❌ Error al descargar'
-    )
-  }
+const backup = async url => {
+  const r = await fetch(`https://youtube-downloader-api.vercel.app/info?url=${encodeURIComponent(url)}`)
+  const j = await r.json()
+  if (!j?.success) return null
+  const a = j.data.formats.find(f => f.mimeType?.includes('audio'))
+  return a?.url || null
 }
 
-handler.help = ['play']
-handler.tags = ['descargas']
+async function race(url) {
+  return new Promise(resolve => {
+    let done = false
+    const finish = u => {
+      if (!done && u) {
+        done = true
+        resolve(u)
+      }
+    }
+
+    withTimeout(savenow(url), 9000).then(finish)
+    withTimeout(backup(url), 7000).then(finish)
+
+    setTimeout(() => resolve(null), 10_000)
+  })
+}
+
+const handler = async (m, { args, usedPrefix }) => {
+  const text = args.join(' ')
+  if (!text) return m.reply(`Uso correcto:\n${usedPrefix}play bad bunny`)
+
+  const search = await yts(text)
+  const video = search.videos?.[0]
+  if (!video) return m.reply('No se encontraron resultados')
+
+  const cacheKey = `yt:${video.videoId}`
+  let url = cacheGet(cacheKey)
+
+  if (!url) {
+    url = await race(video.url)
+    if (!url) return m.reply('No se pudo descargar el audio')
+    cacheSet(cacheKey, url)
+  }
+
+  await m.reply(`Descargando:\n${video.title}`)
+
+  await this.sendMessage(m.chat, {
+    audio: { url },
+    mimetype: 'audio/mpeg',
+    fileName: `${video.title}.mp3`
+  }, { quoted: m })
+}
+
 handler.command = ['play']
+handler.tags = ['descargas']
+handler.help = ['play <texto>']
+handler.group = false
+handler.register = false
 
 export default handler
