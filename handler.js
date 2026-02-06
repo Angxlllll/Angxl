@@ -87,10 +87,14 @@ export function handler(chatUpdate) {
 
 async function handleMessage(raw) {
   const m = smsg(this, raw)
-  if (!m || m.isBaileys || !m.text) return
+if (!m || m.isBaileys) return
 
-  const parsed = parseCommandFast(m.text, getPrefixes())
-  if (!parsed && !global._customPrefixPlugins?.length) return
+const text = m.text
+if (!text) return
+
+const parsed = parseCommandFast(text, getPrefixes())
+
+if (!parsed && !global._customPrefixPlugins?.length) return
 
   const { command, args, usedPrefix } = parsed || {}
 
