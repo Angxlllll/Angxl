@@ -1,6 +1,5 @@
 import fs from 'fs'
 import path from 'path'
-import syntaxerror from 'syntax-error'
 
 const handler = async (m, { conn }) => {
   const pluginRoot = path.join(process.cwd(), 'plugins')
