@@ -7,15 +7,16 @@ const handler = async (m, { conn, participants }) => {
     return m.reply('☁️ *Responde o menciona al usuario*.')
 
   const participant = participants.find(p => p.id === user)
-
   if (!participant)
     return m.reply('❌ Usuario no encontrado en el grupo.')
+
+  const username = user.split('@')[0]
 
   if (participant.admin)
     return conn.sendMessage(
       m.chat,
       {
-        text: `ℹ️ @${user.split('@')[0]} *ya era admin*.`,
+        text: `ℹ️ @${username} *ya era admin*.`,
         mentions: [user]
       },
       { quoted: m }
@@ -27,19 +28,22 @@ const handler = async (m, { conn, participants }) => {
     await conn.sendMessage(
       m.chat,
       {
-        text: `✅ *Admin dado a:* @${user.split('@')[0]}`,
+        text: `✅ *Admin dado a:* @${username}`,
         mentions: [user]
       },
       { quoted: m }
     )
-  } catch {
+  } catch (e) {
+    console.error('[PROMOTE ERROR]', e)
     await m.reply('❌ Error al dar admin.')
   }
 }
 
 handler.group = true
 handler.admin = true
+handler.botAdmin = true
 handler.customPrefix = /^\.?(promote|daradmin|addadmin)/i
-handler.help = ["𝖯𝗋𝗈𝗆𝗈𝗍𝖾"];
-handler.tags = ["𝖦𝖱𝖴𝖯𝖮𝖲"];
+handler.help = ['promote']
+handler.tags = ['grupos']
+
 export default handler
