@@ -2,7 +2,7 @@ import yts from 'yt-search'
 import fetch from 'node-fetch'
 
 const API_URL = 'https://api.stellarwa.xyz'
-const API_KEY = 'DiegoJadiBot'
+const API_KEY = 'Angxll'
 
 async function getAudio(url) {
   const res = await fetch(
