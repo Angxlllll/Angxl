@@ -16,7 +16,6 @@ const {
   makeWASocket,
   DisconnectReason,
   useMultiFileAuthState,
-  fetchLatestBaileysVersion,
   makeCacheableSignalKeyStore
 } = baileys
 
@@ -31,15 +30,24 @@ global.prefixes = Object.freeze(
 
 const SESSION_DIR = global.sessions || 'sessions'
 const { state, saveCreds } = await useMultiFileAuthState(SESSION_DIR)
-const { version } = await fetchLatestBaileysVersion()
 
-const msgRetryCounterCache = new NodeCache({ stdTTL: 60 })
-const userDevicesCache = new NodeCache({ stdTTL: 300 })
+const version = [2, 3000, 1015901307]
+
+const msgRetryCounterCache = new NodeCache({
+  stdTTL: 30,
+  checkperiod: 60
+})
+
+const userDevicesCache = new NodeCache({
+  stdTTL: 120,
+  checkperiod: 300
+})
 
 const rl = readline.createInterface({
   input: process.stdin,
   output: process.stdout
 })
+
 const question = q => new Promise(r => rl.question(q, r))
 
 let option = process.argv.includes('qr') ? '1' : null
@@ -110,21 +118,24 @@ fs.watch(pluginRoot, { recursive: true }, (_, file) => {
   const full = path.join(pluginRoot, file)
 
   clearTimeout(reloadTimers.get(full))
-  reloadTimers.set(full, setTimeout(async () => {
-    if (!fs.existsSync(full)) {
-      delete global.plugins[full]
-      rebuildPluginIndex()
-      return
-    }
-    try {
-      const m = await import(`${full}?update=${Date.now()}`)
-      global.plugins[full] = m.default || m
-      rebuildPluginIndex()
-      console.log(chalk.yellowBright(`↻ Plugin recargado: ${file}`))
-    } catch (e) {
-      console.error('[PLUGIN RELOAD ERROR]', file, e)
-    }
-  }, 150))
+  reloadTimers.set(
+    full,
+    setTimeout(async () => {
+      if (!fs.existsSync(full)) {
+        delete global.plugins[full]
+        rebuildPluginIndex()
+        return
+      }
+      try {
+        const m = await import(`${full}?update=${Date.now()}`)
+        global.plugins[full] = m.default || m
+        rebuildPluginIndex()
+        console.log(chalk.yellowBright(`↻ Plugin recargado: ${file}`))
+      } catch (e) {
+        console.error('[PLUGIN RELOAD ERROR]', file, e)
+      }
+    }, 150)
+  )
 })
 
 let handler = await import('./handler.js')
@@ -145,6 +156,8 @@ async function startSock() {
     },
     markOnlineOnConnect: false,
     generateHighQualityLinkPreview: false,
+    syncFullHistory: false,
+    emitOwnEvents: false,
     getMessage: async () => undefined,
     msgRetryCounterCache,
     userDevicesCache,
@@ -171,7 +184,9 @@ async function startSock() {
     const reason = lastDisconnect?.error?.output?.statusCode
 
     if (connection === 'open') {
-      console.log(chalk.greenBright(`✿ Conectado a ${sock.user?.name || 'Bot'}`))
+      console.log(
+        chalk.greenBright(`✿ Conectado a ${sock.user?.name || 'Bot'}`)
+      )
     }
 
     if (connection === 'close') {
@@ -185,11 +200,17 @@ async function startSock() {
 
   function onMessagesUpsert({ messages, type }) {
     if (type !== 'notify') return
+
+    const filtered = []
     for (const msg of messages) {
       if (!msg?.message) continue
       if (msg.key?.fromMe) continue
       if (msg.key?.id?.startsWith('BAE5')) continue
-      handler.handler.call(sock, { messages: [msg] })
+      filtered.push(msg)
+    }
+
+    if (filtered.length) {
+      handler.handler.call(sock, { messages: filtered })
     }
   }
 
@@ -217,6 +238,7 @@ await startSock()
 process.on('uncaughtException', err => {
   console.error('[UNCAUGHT]', err)
 })
+
 process.on('unhandledRejection', err => {
   console.error('[UNHANDLED]', err)
 })
