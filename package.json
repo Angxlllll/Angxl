@@ -6,7 +6,7 @@
     "node": ">=20"
   },
   "scripts": {
-    "start": "node --no-warnings --no-deprecation main.js"
+  "start": "node main.js"
   },
   "dependencies": {
 "@whiskeysockets/baileys":"github:ds6/buils",
