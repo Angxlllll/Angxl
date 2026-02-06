@@ -144,7 +144,7 @@ async function startSock() {
       )
     },
     markOnlineOnConnect: false,
-    generateHighQualityLinkPreview: true,
+    generateHighQualityLinkPreview: false,
     getMessage: async () => undefined,
     msgRetryCounterCache,
     userDevicesCache,
