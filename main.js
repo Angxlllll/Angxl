@@ -139,10 +139,14 @@ async function startSock() {
     } catch {}
 
     if (!isInit) {
-      sock.ev.off('messages.upsert', sock._handler)
-      sock.ev.off('connection.update', sock._connUpdate)
-      sock.ev.off('creds.update', saveCreds)
-    }
+  if (typeof sock._handler === 'function') {
+    sock.ev.off('messages.upsert', sock._handler)
+  }
+  if (typeof sock._connUpdate === 'function') {
+    sock.ev.off('connection.update', sock._connUpdate)
+  }
+  sock.ev.off('creds.update', saveCreds)
+}
 
     sock._handler = async ({ messages, type }) => {
       if (type !== 'notify') return
