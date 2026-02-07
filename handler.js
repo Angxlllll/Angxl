@@ -5,9 +5,7 @@ import { fileURLToPath } from 'url'
 const DIGITS = s => String(s || '').replace(/\D/g, '')
 
 const OWNER_SET = new Set(
-  (global.owner || []).map(v =>
-    DIGITS(Array.isArray(v) ? v[0] : v)
-  )
+  (global.owner || []).map(v => DIGITS(Array.isArray(v) ? v[0] : v))
 )
 
 global.dfail = async (type, m, conn) => {
@@ -26,13 +24,12 @@ global.dfail = async (type, m, conn) => {
   if (msg) await conn.sendMessage(m.chat, { text: msg }, { quoted: m })
 }
 
+const GROUP_TTL = 60000
 global.groupMetaCache ||= new Map()
-const GROUP_TTL = 15000
 
-async function getGroupAdmins(conn, jid) {
+async function getGroupInfo(conn, jid) {
   const now = Date.now()
   const cached = global.groupMetaCache.get(jid)
-
   if (cached && now - cached.ts < GROUP_TTL) return cached
 
   const meta = await conn.groupMetadata(jid)
@@ -42,7 +39,7 @@ async function getGroupAdmins(conn, jid) {
       .map(p => DIGITS(p.id || p.jid))
   )
 
-  const data = { ts: now, admins, meta }
+  const data = { ts: now, meta, admins }
   global.groupMetaCache.set(jid, data)
   return data
 }
@@ -63,15 +60,15 @@ function getPrefixes() {
 
 function parseCommand(text) {
   const prefixes = getPrefixes()
-  const first = text[0]
-  if (!prefixes.includes(first)) return null
+  const prefix = prefixes.find(p => text.startsWith(p))
+  if (!prefix) return null
 
-  const body = text.slice(1).trim()
+  const body = text.slice(prefix.length).trim()
   if (!body) return null
 
   const i = body.indexOf(' ')
   return {
-    usedPrefix: first,
+    usedPrefix: prefix,
     command: (i === -1 ? body : body.slice(0, i))
       .toLowerCase()
       .replace(/[\u200B-\u200D\uFEFF]/g, ''),
@@ -81,8 +78,8 @@ function parseCommand(text) {
 
 export function handler(chatUpdate) {
   if (!chatUpdate?.messages) return
-  for (const msg of chatUpdate.messages) {
-    handleMessage.call(this, msg)
+  for (const raw of chatUpdate.messages) {
+    handleMessage.call(this, raw)
   }
 }
 
@@ -91,11 +88,9 @@ async function handleMessage(raw) {
   if (!m || m.isBaileys || !m.text) return
 
   const parsed = parseCommand(m.text)
-  let plugins = null
-
-  if (parsed?.command && global.pluginCommandIndex?.has(parsed.command)) {
-    plugins = global.pluginCommandIndex.get(parsed.command)
-  }
+  let plugins = parsed?.command
+    ? global.pluginCommandIndex?.get(parsed.command)
+    : null
 
   if (!plugins && global._customPrefixPlugins?.length) {
     for (const p of global._customPrefixPlugins) {
@@ -109,8 +104,7 @@ async function handleMessage(raw) {
   if (!plugins?.length) return
 
   const senderNum = DIGITS(m.sender)
-  const BOT_NUM = DIGITS(decodeJid(this.user?.id))
-
+  const botNum = DIGITS(decodeJid(this.user?.id))
   const isROwner = OWNER_SET.has(senderNum)
   const isOwner = isROwner || m.fromMe
 
@@ -129,11 +123,11 @@ async function handleMessage(raw) {
     let isAdmin, isBotAdmin, groupMeta, participants
 
     if (m.isGroup && (plugin.admin || plugin.botAdmin)) {
-      const cached = await getGroupAdmins(this, m.chat)
-      isAdmin = cached.admins.has(senderNum)
-      isBotAdmin = cached.admins.has(BOT_NUM)
-      groupMeta = cached.meta
-      participants = cached.meta.participants
+      const info = await getGroupInfo(this, m.chat)
+      isAdmin = info.admins.has(senderNum)
+      isBotAdmin = info.admins.has(botNum)
+      groupMeta = info.meta
+      participants = info.meta.participants
     }
 
     if (plugin.admin && !isAdmin)
@@ -142,10 +136,7 @@ async function handleMessage(raw) {
     if (plugin.botAdmin && !isBotAdmin)
       return global.dfail('botAdmin', m, this)
 
-    const exec = typeof plugin === 'function'
-      ? plugin
-      : plugin.default
-
+    const exec = typeof plugin === 'function' ? plugin : plugin.default
     if (!exec) continue
 
     try {
