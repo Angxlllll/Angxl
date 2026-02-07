@@ -57,6 +57,6 @@ let handler = async (m, { conn }) => {
 handler.command = ['carga', 'update']
 handler.help = ['Update']
 handler.tags = ['OWNER']
-handler.owner = false
+handler.owner = true
 
 export default handler
