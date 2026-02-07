@@ -24,9 +24,11 @@ async function streamToBuffer(stream) {
   return Buffer.concat(chunks)
 }
 
-const getMentions = participants =>
+const getMentions = (participants, conn) =>
   Array.isArray(participants)
-    ? participants.map(p => p.id)
+    ? participants
+        .map(p => conn.decodeJid(p.id))
+        .filter(jid => jid && jid !== conn.user.id)
     : []
 
 const handler = async (m, { conn, args, participants }) => {
@@ -68,7 +70,7 @@ const handler = async (m, { conn, args, participants }) => {
             {
               text: qtext,
               contextInfo: {
-                mentionedJid: getMentions(participants),
+                mentionedJid: getMentions(participants, conn),
                 forwardingScore: 1,
                 isForwarded: true
               }
@@ -86,7 +88,7 @@ const handler = async (m, { conn, args, participants }) => {
       {
         text,
         contextInfo: {
-          mentionedJid: getMentions(participants),
+          mentionedJid: getMentions(participants, conn),
           forwardingScore: 1,
           isForwarded: true
         }
@@ -128,7 +130,7 @@ const handler = async (m, { conn, args, participants }) => {
     {
       ...payload,
       contextInfo: {
-        mentionedJid: getMentions(participants),
+        mentionedJid: getMentions(participants, conn),
         forwardingScore: 1,
         isForwarded: true
       }
