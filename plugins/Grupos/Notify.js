@@ -24,16 +24,25 @@ async function streamToBuffer(stream) {
   return Buffer.concat(chunks)
 }
 
-const getMentions = (participants, conn) =>
-  Array.isArray(participants)
-    ? participants
-        .map(p => conn.decodeJid(p.id))
-        .filter(jid => jid && jid !== conn.user.id)
-    : []
+const getMentionData = (participants, conn) => {
+  if (!Array.isArray(participants)) return { text: '', jids: [] }
+
+  const jids = participants
+    .map(p => conn.decodeJid(p.id))
+    .filter(jid => jid && jid !== conn.user.id)
+
+  const text = jids
+    .map(jid => `@${jid.split('@')[0]}`)
+    .join(' ')
+
+  return { text, jids }
+}
 
 const handler = async (m, { conn, args, participants }) => {
-  const text = args.length ? args.join(' ') : ''
+  const textInput = args.join(' ')
   const root = unwrap(m.message)
+
+  const { text: mentionText, jids } = getMentionData(participants, conn)
 
   let source = null
   let sourceType = null
@@ -68,11 +77,9 @@ const handler = async (m, { conn, args, participants }) => {
           return conn.sendMessage(
             m.chat,
             {
-              text: qtext,
+              text: `${mentionText}\n\n${qtext}`,
               contextInfo: {
-                mentionedJid: getMentions(participants, conn),
-                forwardingScore: 1,
-                isForwarded: true
+                mentionedJid: jids
               }
             },
             { quoted: m }
@@ -82,15 +89,13 @@ const handler = async (m, { conn, args, participants }) => {
     }
   }
 
-  if (!source && text) {
+  if (!source && textInput) {
     return conn.sendMessage(
       m.chat,
       {
-        text,
+        text: `${mentionText}\n\n${textInput}`,
         contextInfo: {
-          mentionedJid: getMentions(participants, conn),
-          forwardingScore: 1,
-          isForwarded: true
+          mentionedJid: jids
         }
       },
       { quoted: m }
@@ -121,7 +126,7 @@ const handler = async (m, { conn, args, participants }) => {
   } else {
     payload = {
       [sourceType.replace('Message', '')]: media,
-      caption: text || undefined
+      caption: `${mentionText}\n\n${textInput || ''}`
     }
   }
 
@@ -130,9 +135,7 @@ const handler = async (m, { conn, args, participants }) => {
     {
       ...payload,
       contextInfo: {
-        mentionedJid: getMentions(participants, conn),
-        forwardingScore: 1,
-        isForwarded: true
+        mentionedJid: jids
       }
     },
     { quoted: m }
