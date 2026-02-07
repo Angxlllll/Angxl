@@ -61,17 +61,18 @@ function handleMessage(raw) {
     return global.dfail('owner', m, this)
 
   let isAdmin = false
-  let isBotAdmin = false
-  let participants = null
-  let groupMetadata = null
+let isBotAdmin = false
+let participants = null
+let groupMetadata = null
 
-  if (m.isGroup && (plugin.admin || plugin.botAdmin)) {
-    const info = global.groupCache?.get(m.chat)
-    if (!info) return
-    isAdmin = info.admins.has(senderNum)
-    isBotAdmin = info.botAdmin
+if (m.isGroup) {
+  const info = global.groupCache?.get(m.chat)
+
+  if (info) {
     participants = info.participants
     groupMetadata = info.meta
+    isAdmin = info.admins.has(senderNum)
+    isBotAdmin = info.botAdmin
   }
 
   if (plugin.admin && !isAdmin)
@@ -79,6 +80,7 @@ function handleMessage(raw) {
 
   if (plugin.botAdmin && !isBotAdmin)
     return global.dfail('botAdmin', m, this)
+}
 
   const args = space === -1 ? [] : text.slice(space + 1).split(/\s+/)
 
