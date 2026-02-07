@@ -102,18 +102,19 @@ async function handleMessage(raw) {
   let groupMetadata = null
 
   if (m.isGroup) {
+    const meta = await this.groupMetadata(m.chat)
+    participants = meta.participants
+    groupMetadata = meta
+
     let admins = global.groupAdmins.get(m.chat)
 
     if (!admins) {
-      const meta = await this.groupMetadata(m.chat)
       admins = new Set(
         meta.participants
           .filter(p => p.admin)
           .map(p => DIGITS(decodeJid(p.id)))
       )
       global.groupAdmins.set(m.chat, admins)
-      participants = meta.participants
-      groupMetadata = meta
     }
 
     isAdmin = admins.has(m.senderNum)
