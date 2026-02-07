@@ -6,7 +6,7 @@ const DIGITS = s => String(s || '').replace(/\D/g, '')
 
 const OWNER_SET = new Set(
   (global.owner || []).map(v =>
-    DIGITS(Array.isArray(v) ? v[0] : v)
+    DIGITS(decodeJid(Array.isArray(v) ? v[0] : v))
   )
 )
 
@@ -38,7 +38,7 @@ async function getGroupInfo(conn, jid) {
   const admins = new Set(
     meta.participants
       .filter(p => p.admin)
-      .map(p => DIGITS(p.id))
+      .map(p => DIGITS(decodeJid(p.id)))
   )
 
   const data = { ts: now, meta, admins }
@@ -55,22 +55,38 @@ async function handleMessage(raw) {
   const m = smsg(this, raw)
   if (!m || m.isBaileys || !m.text) return
 
-  const text = m.text
+  const text = m.text.trim()
+
+  let plugin = null
+  let command = null
+  let usedPrefix = null
+
   const c = text.charCodeAt(0)
-  if (c !== 46 && c !== 33) return
+  if (c === 46 || c === 33) {
+    const body = text.slice(1).trim()
+    const space = body.indexOf(' ')
+    command = (space === -1 ? body : body.slice(0, space))
+      .toLowerCase()
+      .replace(/[\u200B-\u200D\uFEFF]/g, '')
+    plugin = global.COMMAND_MAP?.get(command)
+    usedPrefix = text[0]
+  }
 
-  const space = text.indexOf(' ')
-  const command = (space === -1 ? text.slice(1) : text.slice(1, space))
-    .toLowerCase()
-    .replace(/[\u200B-\u200D\uFEFF]/g, '')
+  if (!plugin && global._customPrefixPlugins?.length) {
+    for (const p of global._customPrefixPlugins) {
+      if (p.customPrefix?.test(text)) {
+        plugin = p
+        break
+      }
+    }
+  }
 
-  const plugin = global.COMMAND_MAP?.get(command)
   if (!plugin || plugin.disabled) return
 
   if (plugin.group && !m.isGroup)
     return global.dfail('group', m, this)
 
-  const senderNum = DIGITS(m.sender)
+  const senderNum = DIGITS(decodeJid(m.sender))
   const isROwner = OWNER_SET.has(senderNum)
   const isOwner = isROwner || m.fromMe
 
@@ -85,23 +101,26 @@ async function handleMessage(raw) {
   let participants = null
   let groupMetadata = null
 
-  if (m.isGroup && (plugin.admin || plugin.botAdmin)) {
+  if (m.isGroup) {
     const info = await getGroupInfo(this, m.chat)
+    participants = info.meta.participants
+    groupMetadata = info.meta
     isAdmin = info.admins.has(senderNum)
     isBotAdmin = info.admins.has(
       DIGITS(decodeJid(this.user.id))
     )
-    participants = info.meta.participants
-    groupMetadata = info.meta
+
+    if (plugin.admin && !isAdmin)
+      return global.dfail('admin', m, this)
+
+    if (plugin.botAdmin && !isBotAdmin)
+      return global.dfail('botAdmin', m, this)
   }
 
-  if (plugin.admin && !isAdmin)
-    return global.dfail('admin', m, this)
-
-  if (plugin.botAdmin && !isBotAdmin)
-    return global.dfail('botAdmin', m, this)
-
-  const args = space === -1 ? [] : text.slice(space + 1).split(/\s+/)
+  const args =
+    command && usedPrefix
+      ? text.slice(usedPrefix.length + command.length).trim().split(/\s+/).filter(Boolean)
+      : []
 
   const exec = plugin.exec || plugin.default || plugin
   if (!exec) return
@@ -111,7 +130,7 @@ async function handleMessage(raw) {
       conn: this,
       args,
       command,
-      usedPrefix: text[0],
+      usedPrefix,
       participants,
       groupMetadata,
       isROwner,
@@ -121,8 +140,7 @@ async function handleMessage(raw) {
       chat: m.chat
     })
   } catch (e) {
-    if (process.env.NODE_ENV === 'development')
-      console.error('[PLUGIN ERROR]', plugin.name, e)
+    m.reply(`❌ Error:\n${e.message}`)
   }
 }
 
