@@ -26,51 +26,52 @@ global.dfail = async (type, m, conn) => {
   if (msg) conn.sendMessage(m.chat, { text: msg }, { quoted: m })
 }
 
-const GROUP_TTL = 60000
-global.groupMetaCache ||= new Map()
+Object.freeze(global.dfail)
 
-async function getGroupInfo(conn, jid) {
-  const now = Date.now()
-  const cached = global.groupMetaCache.get(jid)
-  if (cached && now - cached.ts < GROUP_TTL) return cached
+global.groupAdmins ||= new Map()
 
-  const meta = await conn.groupMetadata(jid)
-  const admins = new Set(
-    meta.participants
-      .filter(p => p.admin)
-      .map(p => DIGITS(decodeJid(p.id)))
-  )
-
-  const data = { ts: now, meta, admins }
-  global.groupMetaCache.set(jid, data)
-  return data
+export function bindGroupEvents(conn) {
+  conn.ev.on('group-participants.update', ({ id, participants, action }) => {
+    const admins = global.groupAdmins.get(id)
+    if (!admins) return
+    for (const p of participants) {
+      const num = DIGITS(decodeJid(p))
+      if (action === 'promote') admins.add(num)
+      else if (action === 'demote') admins.delete(num)
+    }
+  })
 }
 
 export function handler(chatUpdate) {
   if (!chatUpdate?.messages) return
-  for (const raw of chatUpdate.messages) handleMessage.call(this, raw)
+  for (const raw of chatUpdate.messages) {
+    handleMessage.call(this, raw)
+  }
 }
 
 async function handleMessage(raw) {
   const m = smsg(this, raw)
   if (!m || m.isBaileys || !m.text) return
 
-  const text = m.text.trim()
+  const text = m.text
+  const first = text[0]
+
+  if (first !== '.' && first !== '!') return
+
+  this.botNum ||= DIGITS(decodeJid(this.user.id))
+  m.senderNum ||= DIGITS(decodeJid(m.sender))
 
   let plugin = null
   let command = null
-  let usedPrefix = null
+  let usedPrefix = first
 
-  const c = text.charCodeAt(0)
-  if (c === 46 || c === 33) {
-    const body = text.slice(1).trim()
-    const space = body.indexOf(' ')
-    command = (space === -1 ? body : body.slice(0, space))
-      .toLowerCase()
-      .replace(/[\u200B-\u200D\uFEFF]/g, '')
-    plugin = global.COMMAND_MAP?.get(command)
-    usedPrefix = text[0]
-  }
+  const body = text.slice(1).trim()
+  const space = body.indexOf(' ')
+  command = (space === -1 ? body : body.slice(0, space))
+    .toLowerCase()
+    .replace(/[\u200B-\u200D\uFEFF]/g, '')
+
+  plugin = global.COMMAND_MAP?.get(command)
 
   if (!plugin && global._customPrefixPlugins?.length) {
     for (const p of global._customPrefixPlugins) {
@@ -86,8 +87,7 @@ async function handleMessage(raw) {
   if (plugin.group && !m.isGroup)
     return global.dfail('group', m, this)
 
-  const senderNum = DIGITS(decodeJid(m.sender))
-  const isROwner = OWNER_SET.has(senderNum)
+  const isROwner = OWNER_SET.has(m.senderNum)
   const isOwner = isROwner || m.fromMe
 
   if (plugin.rowner && !isROwner)
@@ -102,13 +102,22 @@ async function handleMessage(raw) {
   let groupMetadata = null
 
   if (m.isGroup) {
-    const info = await getGroupInfo(this, m.chat)
-    participants = info.meta.participants
-    groupMetadata = info.meta
-    isAdmin = info.admins.has(senderNum)
-    isBotAdmin = info.admins.has(
-      DIGITS(decodeJid(this.user.id))
-    )
+    let admins = global.groupAdmins.get(m.chat)
+
+    if (!admins) {
+      const meta = await this.groupMetadata(m.chat)
+      admins = new Set(
+        meta.participants
+          .filter(p => p.admin)
+          .map(p => DIGITS(decodeJid(p.id)))
+      )
+      global.groupAdmins.set(m.chat, admins)
+      participants = meta.participants
+      groupMetadata = meta
+    }
+
+    isAdmin = admins.has(m.senderNum)
+    isBotAdmin = admins.has(this.botNum)
 
     if (plugin.admin && !isAdmin)
       return global.dfail('admin', m, this)
@@ -117,16 +126,12 @@ async function handleMessage(raw) {
       return global.dfail('botAdmin', m, this)
   }
 
-  const args =
-    command && usedPrefix
-      ? text.slice(usedPrefix.length + command.length).trim().split(/\s+/).filter(Boolean)
-      : []
-
+  const args = body.slice(command.length).trim().split(/\s+/).filter(Boolean)
   const exec = plugin.exec || plugin.default || plugin
   if (!exec) return
 
-  try {
-    await exec.call(this, m, {
+  queueMicrotask(() => {
+    exec.call(this, m, {
       conn: this,
       args,
       command,
@@ -138,10 +143,10 @@ async function handleMessage(raw) {
       isAdmin,
       isBotAdmin,
       chat: m.chat
+    }).catch(e => {
+      m.reply(`❌ Error:\n${e.message}`)
     })
-  } catch (e) {
-    m.reply(`❌ Error:\n${e.message}`)
-  }
+  })
 }
 
 if (process.env.NODE_ENV === 'development') {
