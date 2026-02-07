@@ -60,30 +60,37 @@ const getFlag = num => {
 }
 
 const handler = async (m, { conn, participants }) => {
-  if (!participants?.length) return
+  if (!m.isGroup) return
+
+  if (!participants || !participants.length) {
+    const meta = await conn.groupMetadata(m.chat)
+    participants = meta.participants
+  }
 
   conn.sendMessage(m.chat, { react: { text: '🗣️', key: m.key } })
 
-  const lines = new Array(participants.length)
-  const mentions = new Array(participants.length)
+  const lines = []
+  const mentions = []
 
-  let i = 0
   for (const p of participants) {
     const jid = p.id || p.jid
     if (!jid) continue
-    const num = jid.slice(0, jid.indexOf('@'))
-    lines[i] = `┊» ${getFlag(num)} @${num}`
-    mentions[i] = jid
-    i++
+    const num = jid.split('@')[0]
+    lines.push(`┊» ${getFlag(num)} @${num}`)
+    mentions.push(jid)
   }
 
   const text =
 `!  MENCION GENERAL  !
-PARA ${i} MIEMBROS 🗣️
+PARA ${mentions.length} MIEMBROS 🗣️
 
-${lines.slice(0, i).join('\n')}`
+${lines.join('\n')}`
 
-  await conn.sendMessage(m.chat, { text, mentions: mentions.slice(0, i) }, { quoted: m })
+  await conn.sendMessage(
+    m.chat,
+    { text, mentions },
+    { quoted: m }
+  )
 }
 
 handler.help = ['todos']
