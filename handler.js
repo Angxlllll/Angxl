@@ -14,7 +14,7 @@ global.dfail = async (type, m, conn) => {
   const msg = {
     rowner: '𝖤𝗌𝗍𝖾 𝖢𝗈𝗆𝖺𝗇𝖽𝗈 𝖲𝗈𝗅𝗈 𝖯𝗎𝖾𝖽𝖾 𝖲𝖾𝗋 𝖴𝗌𝖺𝖽𝗈 𝖯𝗈𝗋 𝖬𝗂 𝖢𝗋𝖾𝖺𝖽𝗈𝗋',
     owner: '𝖤𝗌𝗍𝖾 𝖢𝗈𝗆𝖺𝗇𝖽𝗈 𝖲𝗈𝗅𝗈 𝖯𝗎𝖾𝖽𝖾 𝖲𝖾𝗋 𝖴𝗍𝗂𝗅𝗂𝗓𝖺𝖽𝗈 𝖯𝗈𝗋 𝖬𝗂 𝖢𝗋𝖾𝖺𝖽𝗈𝗋',
-    mods: '𝖤𝗌𝗍𝖾 𝖢𝗈𝗆𝖺𝗇𝖽𝗈 𝖲𝗈𝗅𝗈 𝖯𝗎𝖾𝖽𝖾 𝖲𝖾𝗋 𝖴𝗌𝖺𝖽𝗈 𝖯𝗈𝗋 𝖽𝖾𝗌𝖺𝗋𝗋𝗈𝗅𝗅𝖺𝖽𝗈𝗋𝖾𝗌',
+    mods: '𝖤𝗌𝗍𝖾 𝖢𝗈𝗆𝖺𝗇𝖽𝗈 𝖲𝗈𝗅𝗈 𝖯𝗎𝖾𝖽𝖾 𝖲𝖾𝗋 𝖴𝗌𝖺𝖽𝗈 𝖯𝗈𝗋 𝖣𝖾𝗌𝖺𝗋𝗋𝗈𝗅𝗅𝖺𝖽𝗈𝗋𝖾𝗌',
     premium: '𝖤𝗌𝗍𝖾 𝖢𝗈𝗆𝖺𝗇𝖽𝗈 𝖲𝗈𝗅𝗈 𝖫𝗈 𝖯𝗎𝖾𝖽𝖾𝗇 𝖴𝗍𝗂𝗅𝗂𝗓𝖺𝗋 𝖴𝗌𝖺𝗋𝗂𝗈𝗌 𝖯𝗋𝖾𝗆𝗂𝗎𝗆',
     group: '𝖤𝗌𝗍𝖾 𝖢𝗈𝗆𝖺𝗇𝖽𝗈 𝖲𝗈𝗅𝗈 𝖥𝗎𝗇𝖼𝗂𝗈𝗇𝖺 𝖤𝗇 𝖦𝗋𝗎𝗉𝖺𝗌',
     private: '𝖤𝗌𝗍𝖾 𝖢𝗈𝗆𝖺𝗇𝖽𝗈 𝖲𝗈𝗅𝗈 𝖲𝖾 𝖯𝗎𝖾𝖽𝖾 𝖮𝖼𝗎𝗉𝖺𝗋 𝖤𝗇 𝖤𝗅 𝖯𝗋𝗂𝗏𝖺𝖽𝗈',
@@ -29,23 +29,22 @@ global.dfail = async (type, m, conn) => {
 global.groupMetaCache ||= new Map()
 const GROUP_TTL = 15000
 
-async function getGroupContext(conn, jid) {
+async function getGroupAdmins(conn, jid) {
   const now = Date.now()
-  let cached = global.groupMetaCache.get(jid)
+  const cached = global.groupMetaCache.get(jid)
 
-  if (!cached || now - cached.ts > GROUP_TTL) {
-    const meta = await conn.groupMetadata(jid)
-    const admins = new Set()
+  if (cached && now - cached.ts < GROUP_TTL) return cached
 
-    for (const p of meta.participants || []) {
-      if (p.admin) admins.add(DIGITS(p.id || p.jid))
-    }
+  const meta = await conn.groupMetadata(jid)
+  const admins = new Set(
+    meta.participants
+      .filter(p => p.admin)
+      .map(p => DIGITS(p.id || p.jid))
+  )
 
-    cached = { ts: now, meta, admins }
-    global.groupMetaCache.set(jid, cached)
-  }
-
-  return cached
+  const data = { ts: now, admins, meta }
+  global.groupMetaCache.set(jid, data)
+  return data
 }
 
 const PREFIX_CACHE = { raw: null, list: null }
@@ -71,13 +70,11 @@ function parseCommand(text) {
   if (!body) return null
 
   const i = body.indexOf(' ')
-  const cmd = (i === -1 ? body : body.slice(0, i))
-    .toLowerCase()
-    .replace(/[\u200B-\u200D\uFEFF]/g, '')
-
   return {
     usedPrefix: first,
-    command: cmd,
+    command: (i === -1 ? body : body.slice(0, i))
+      .toLowerCase()
+      .replace(/[\u200B-\u200D\uFEFF]/g, ''),
     args: i === -1 ? [] : body.slice(i + 1).split(/\s+/)
   }
 }
@@ -91,41 +88,31 @@ export function handler(chatUpdate) {
 
 async function handleMessage(raw) {
   const m = smsg(this, raw)
-  if (!m || m.isBaileys) return
+  if (!m || m.isBaileys || !m.text) return
 
-  const text = m.text
-  if (!text) return
-
-  const first = text[0]
-  if (first !== '.' && !global._customPrefixPlugins?.length) return
-
-  const parsed = parseCommand(text)
-  if (!parsed && !global._customPrefixPlugins?.length) return
-
-  const { command, args, usedPrefix } = parsed || {}
-
-  const senderNum = DIGITS(m.sender)
-  const isROwner = OWNER_SET.has(senderNum)
-  const isOwner = isROwner || m.fromMe
-
+  const parsed = parseCommand(m.text)
   let plugins = null
 
-  if (command && global.pluginCommandIndex?.has(command)) {
-    plugins = global.pluginCommandIndex.get(command)
+  if (parsed?.command && global.pluginCommandIndex?.has(parsed.command)) {
+    plugins = global.pluginCommandIndex.get(parsed.command)
   }
 
-  if (global._customPrefixPlugins?.length) {
+  if (!plugins && global._customPrefixPlugins?.length) {
     for (const p of global._customPrefixPlugins) {
-      if (p.customPrefix?.test(text)) {
-        plugins ||= []
-        plugins.push(p)
+      if (p.customPrefix?.test(m.text)) {
+        plugins = [p]
+        break
       }
     }
   }
 
   if (!plugins?.length) return
 
+  const senderNum = DIGITS(m.sender)
   const BOT_NUM = DIGITS(decodeJid(this.user?.id))
+
+  const isROwner = OWNER_SET.has(senderNum)
+  const isOwner = isROwner || m.fromMe
 
   for (const plugin of plugins) {
     if (!plugin || plugin.disabled) continue
@@ -133,22 +120,25 @@ async function handleMessage(raw) {
     if (plugin.group && !m.isGroup)
       return global.dfail('group', m, this)
 
-    let groupMeta, isAdmin, isBotAdmin, participants
-
-    if (m.isGroup && (plugin.admin || plugin.botAdmin)) {
-      const cached = await getGroupContext(this, m.chat)
-      groupMeta = cached.meta
-      participants = cached.meta.participants
-      isAdmin = cached.admins.has(senderNum)
-      isBotAdmin = cached.admins.has(BOT_NUM)
-    }
-
     if (plugin.rowner && !isROwner)
       return global.dfail('rowner', m, this)
+
     if (plugin.owner && !isOwner)
       return global.dfail('owner', m, this)
+
+    let isAdmin, isBotAdmin, groupMeta, participants
+
+    if (m.isGroup && (plugin.admin || plugin.botAdmin)) {
+      const cached = await getGroupAdmins(this, m.chat)
+      isAdmin = cached.admins.has(senderNum)
+      isBotAdmin = cached.admins.has(BOT_NUM)
+      groupMeta = cached.meta
+      participants = cached.meta.participants
+    }
+
     if (plugin.admin && !isAdmin)
       return global.dfail('admin', m, this)
+
     if (plugin.botAdmin && !isBotAdmin)
       return global.dfail('botAdmin', m, this)
 
@@ -161,9 +151,9 @@ async function handleMessage(raw) {
     try {
       await exec.call(this, m, {
         conn: this,
-        args,
-        usedPrefix,
-        command,
+        args: parsed?.args || [],
+        usedPrefix: parsed?.usedPrefix,
+        command: parsed?.command,
         participants,
         groupMetadata: groupMeta,
         isROwner,
@@ -174,7 +164,7 @@ async function handleMessage(raw) {
       })
     } catch (e) {
       if (process.env.NODE_ENV === 'development') {
-        console.error('[PLUGIN ERROR]', plugin?.name || command, e)
+        console.error('[PLUGIN ERROR]', plugin?.name, e)
       }
     }
     return
