@@ -6,7 +6,7 @@ const DIGITS = s => String(s || '').replace(/\D/g, '')
 
 const OWNER_SET = new Set(
   (global.owner || []).map(v =>
-    DIGITS(decodeJid(Array.isArray(v) ? v[0] : v))
+    DIGITS(Array.isArray(v) ? v[0] : v)
   )
 )
 
