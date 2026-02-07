@@ -6,13 +6,13 @@ import {
 function unwrap(m) {
   let n = m
   while (n) {
-    n =
+    const next =
       n.viewOnceMessage?.message ||
       n.viewOnceMessageV2?.message ||
       n.viewOnceMessageV2Extension?.message ||
-      n.ephemeralMessage?.message ||
-      n
-    if (n === m) break
+      n.ephemeralMessage?.message
+    if (!next) break
+    n = next
   }
   return n
 }
@@ -23,6 +23,11 @@ async function streamToBuffer(stream) {
   for await (const c of stream) chunks.push(c)
   return Buffer.concat(chunks)
 }
+
+const getMentions = participants =>
+  Array.isArray(participants)
+    ? participants.map(p => p.id)
+    : []
 
 const handler = async (m, { conn, args, participants }) => {
   const text = args.length ? args.join(' ') : ''
@@ -56,13 +61,14 @@ const handler = async (m, { conn, args, participants }) => {
         const qtext =
           q.conversation ||
           q.extendedTextMessage?.text
+
         if (qtext) {
           return conn.sendMessage(
             m.chat,
             {
               text: qtext,
               contextInfo: {
-                mentionedJid: participants.map(p => p.id),
+                mentionedJid: getMentions(participants),
                 forwardingScore: 1,
                 isForwarded: true
               }
@@ -80,7 +86,7 @@ const handler = async (m, { conn, args, participants }) => {
       {
         text,
         contextInfo: {
-          mentionedJid: participants.map(p => p.id),
+          mentionedJid: getMentions(participants),
           forwardingScore: 1,
           isForwarded: true
         }
@@ -122,7 +128,7 @@ const handler = async (m, { conn, args, participants }) => {
     {
       ...payload,
       contextInfo: {
-        mentionedJid: participants.map(p => p.id),
+        mentionedJid: getMentions(participants),
         forwardingScore: 1,
         isForwarded: true
       }
@@ -134,6 +140,7 @@ const handler = async (m, { conn, args, participants }) => {
 handler.command = ['n', 'tag', 'notify']
 handler.group = true
 handler.admin = true
+handler.needParticipants = true
 handler.help = ['Notify']
 handler.tags = ['Grupos']
 
