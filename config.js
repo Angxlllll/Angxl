@@ -1,7 +1,7 @@
 import { fileURLToPath } from 'url'
 
 const OWNER = Object.freeze([
-  '+57 1 4222810',
+  '5714222810',
   '159606034665538',
   '3264846290995',
   '205819731832938'
