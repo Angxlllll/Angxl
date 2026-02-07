@@ -60,10 +60,13 @@ const pluginRoot = path.join(__dirname, 'plugins')
 global.plugins = Object.create(null)
 global.pluginCommandIndex = new Map()
 global._customPrefixPlugins = []
+global.COMMAND_MAP = new Map()
+global.groupCache = new Map()
 
 function rebuildPluginIndex() {
   global.pluginCommandIndex.clear()
   global._customPrefixPlugins.length = 0
+  global.COMMAND_MAP.clear()
 
   for (const plugin of Object.values(global.plugins)) {
     if (!plugin || plugin.disabled) continue
@@ -77,12 +80,16 @@ function rebuildPluginIndex() {
     if (!Array.isArray(cmds)) cmds = [cmds]
 
     for (const c of cmds) {
-      let arr = global.pluginCommandIndex.get(c)
+      const cmd = c.toLowerCase()
+      let arr = global.pluginCommandIndex.get(cmd)
       if (!arr) {
         arr = []
-        global.pluginCommandIndex.set(c, arr)
+        global.pluginCommandIndex.set(cmd, arr)
       }
       arr.push(plugin)
+      if (!global.COMMAND_MAP.has(cmd)) {
+        global.COMMAND_MAP.set(cmd, plugin)
+      }
     }
   }
 }
@@ -101,6 +108,23 @@ async function loadPlugins(dir) {
 }
 
 let handler = await import('./handler.js')
+
+function cacheGroup(meta, sock) {
+  const admins = new Set()
+  for (const p of meta.participants) {
+    if (p.admin) admins.add(p.id.replace(/\D/g, ''))
+  }
+
+  const botNum = sock.user.id.replace(/\D/g, '')
+  const botAdmin = admins.has(botNum)
+
+  global.groupCache.set(meta.id, {
+    admins,
+    botAdmin,
+    participants: meta.participants,
+    meta
+  })
+}
 
 async function startSock() {
   const sock = makeWASocket({
@@ -134,41 +158,45 @@ async function startSock() {
 
   let pairingRequested = false
 
-sock.ev.on('connection.update', async update => {
-  const { connection } = update
+  sock.ev.on('connection.update', async update => {
+    const { connection } = update
 
-  if (connection === 'open') {
-    console.log(chalk.greenBright('✿ Conectado'))
-  }
+    if (connection === 'open') {
+      global.BOT_NUMBER = sock.user.id.replace(/\D/g, '')
+      console.log(chalk.greenBright('✿ Conectado'))
+    }
 
-  if (
-    option === '2' &&
-    !pairingRequested &&
-    !fs.existsSync(`./${SESSION_DIR}/creds.json`) &&
-    (connection === 'connecting' || connection === 'open')
-  ) {
-    pairingRequested = true
+    if (
+      option === '2' &&
+      !pairingRequested &&
+      !fs.existsSync(`./${SESSION_DIR}/creds.json`) &&
+      (connection === 'connecting' || connection === 'open')
+    ) {
+      pairingRequested = true
+      console.log(chalk.cyanBright('\nIngresa tu número con código país'))
+      phoneNumber = await question('--> ')
+      const clean = phoneNumber.replace(/\D/g, '')
+      const code = await sock.requestPairingCode(clean)
+      console.log(chalk.greenBright('\nCódigo de vinculación:\n'))
+      console.log(chalk.bold(code.match(/.{1,4}/g).join(' ')))
+    }
+  })
 
-    console.log(chalk.cyanBright('\nIngresa tu número con código país'))
-    phoneNumber = await question('--> ')
+  sock.ev.on('groups.update', async groups => {
+    for (const g of groups) {
+      const meta = await sock.groupMetadata(g.id)
+      cacheGroup(meta, sock)
+    }
+  })
 
-    const clean = phoneNumber.replace(/\D/g, '')
-    const code = await sock.requestPairingCode(clean)
-
-    console.log(chalk.greenBright('\nCódigo de vinculación:\n'))
-    console.log(chalk.bold(code.match(/.{1,4}/g).join(' ')))
-  }
-})
+  sock.ev.on('group-participants.update', async ({ id }) => {
+    const meta = await sock.groupMetadata(id)
+    cacheGroup(meta, sock)
+  })
 
   function onConnectionUpdate(update) {
     const { connection, lastDisconnect } = update
     const reason = lastDisconnect?.error?.output?.statusCode
-
-    if (connection === 'open') {
-      console.log(
-        chalk.greenBright(`✿ Conectado a ${sock.user?.name || 'Bot'}`)
-      )
-    }
 
     if (connection === 'close') {
       if (reason === DisconnectReason.loggedOut) {
