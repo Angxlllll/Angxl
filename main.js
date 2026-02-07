@@ -164,14 +164,13 @@ async function startSock() {
     if (connection === 'open') {
       global.BOT_NUMBER = sock.user.id.replace(/\D/g, '')
       console.log(chalk.greenBright('✿ Conectado'))
-    }
 
-const file = './lastRestarter.json'
+      const file = './lastRestarter.json'
       if (fs.existsSync(file)) {
         try {
           const data = JSON.parse(fs.readFileSync(file, 'utf-8'))
           if (data?.chatId && data?.key) {
-            await conn.sendMessage(
+            await sock.sendMessage(
               data.chatId,
               {
                 text: `✅ *${global.namebot} está en línea nuevamente* 🚀`,
@@ -180,7 +179,9 @@ const file = './lastRestarter.json'
             )
           }
           fs.unlinkSync(file)
-        } catch {}
+        } catch (e) {
+          console.error(e)
+        }
       }
     }
 
