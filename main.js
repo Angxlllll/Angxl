@@ -166,6 +166,24 @@ async function startSock() {
       console.log(chalk.greenBright('✿ Conectado'))
     }
 
+const file = './lastRestarter.json'
+      if (fs.existsSync(file)) {
+        try {
+          const data = JSON.parse(fs.readFileSync(file, 'utf-8'))
+          if (data?.chatId && data?.key) {
+            await conn.sendMessage(
+              data.chatId,
+              {
+                text: `✅ *${global.namebot} está en línea nuevamente* 🚀`,
+                edit: data.key
+              }
+            )
+          }
+          fs.unlinkSync(file)
+        } catch {}
+      }
+    }
+
     if (
       option === '2' &&
       !pairingRequested &&
