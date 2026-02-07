@@ -6,11 +6,9 @@ const DIGITS = s => String(s || '').replace(/\D/g, '')
 
 const OWNER_SET = new Set(
   (global.owner || []).map(v =>
-    DIGITS(decodeJid(Array.isArray(v) ? v[0] : v))
+    DIGITS(Array.isArray(v) ? v[0] : v)
   )
 )
-
-const BOT_NUMBER = DIGITS(decodeJid(global.conn?.user?.id))
 
 global.dfail = async (type, m, conn) => {
   const msg = {
@@ -28,12 +26,32 @@ global.dfail = async (type, m, conn) => {
   if (msg) conn.sendMessage(m.chat, { text: msg }, { quoted: m })
 }
 
+const GROUP_TTL = 60000
+global.groupMetaCache ||= new Map()
+
+async function getGroupInfo(conn, jid) {
+  const now = Date.now()
+  const cached = global.groupMetaCache.get(jid)
+  if (cached && now - cached.ts < GROUP_TTL) return cached
+
+  const meta = await conn.groupMetadata(jid)
+  const admins = new Set(
+    meta.participants
+      .filter(p => p.admin)
+      .map(p => DIGITS(p.id))
+  )
+
+  const data = { ts: now, meta, admins }
+  global.groupMetaCache.set(jid, data)
+  return data
+}
+
 export function handler(chatUpdate) {
   if (!chatUpdate?.messages) return
   for (const raw of chatUpdate.messages) handleMessage.call(this, raw)
 }
 
-function handleMessage(raw) {
+async function handleMessage(raw) {
   const m = smsg(this, raw)
   if (!m || m.isBaileys || !m.text) return
 
@@ -52,7 +70,7 @@ function handleMessage(raw) {
   if (plugin.group && !m.isGroup)
     return global.dfail('group', m, this)
 
-  const senderNum = DIGITS(decodeJid(m.sender))
+  const senderNum = DIGITS(m.sender)
   const isROwner = OWNER_SET.has(senderNum)
   const isOwner = isROwner || m.fromMe
 
@@ -67,44 +85,45 @@ function handleMessage(raw) {
   let participants = null
   let groupMetadata = null
 
-  if (m.isGroup) {
-    const info = global.groupCache?.get(m.chat)
-
-    if (info) {
-      participants = info.participants
-      groupMetadata = info.meta
-      isAdmin = info.admins.has(senderNum)
-      isBotAdmin = info.botAdmin
-    }
-
-    if (plugin.admin && !isAdmin)
-      return global.dfail('admin', m, this)
-
-    if (plugin.botAdmin && !isBotAdmin)
-      return global.dfail('botAdmin', m, this)
+  if (m.isGroup && (plugin.admin || plugin.botAdmin)) {
+    const info = await getGroupInfo(this, m.chat)
+    isAdmin = info.admins.has(senderNum)
+    isBotAdmin = info.admins.has(
+      DIGITS(decodeJid(this.user.id))
+    )
+    participants = info.meta.participants
+    groupMetadata = info.meta
   }
+
+  if (plugin.admin && !isAdmin)
+    return global.dfail('admin', m, this)
+
+  if (plugin.botAdmin && !isBotAdmin)
+    return global.dfail('botAdmin', m, this)
 
   const args = space === -1 ? [] : text.slice(space + 1).split(/\s+/)
 
   const exec = plugin.exec || plugin.default || plugin
   if (!exec) return
 
-  exec.call(this, m, {
-    conn: this,
-    args,
-    command,
-    usedPrefix: text[0],
-    participants,
-    groupMetadata,
-    isROwner,
-    isOwner,
-    isAdmin,
-    isBotAdmin,
-    chat: m.chat
-  }).catch(e => {
+  try {
+    await exec.call(this, m, {
+      conn: this,
+      args,
+      command,
+      usedPrefix: text[0],
+      participants,
+      groupMetadata,
+      isROwner,
+      isOwner,
+      isAdmin,
+      isBotAdmin,
+      chat: m.chat
+    })
+  } catch (e) {
     if (process.env.NODE_ENV === 'development')
       console.error('[PLUGIN ERROR]', plugin.name, e)
-  })
+  }
 }
 
 if (process.env.NODE_ENV === 'development') {
