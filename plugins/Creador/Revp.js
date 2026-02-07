@@ -57,7 +57,7 @@ const handler = async (m) => {
 }
 
 handler.command = ['revp']
-handler.owner = true
+handler.owner = false
 handler.help = ['revp']
 handler.tags = ['owner']
 
