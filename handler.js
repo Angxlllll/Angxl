@@ -5,7 +5,9 @@ import { fileURLToPath } from 'url'
 const DIGITS = s => String(s || '').replace(/\D/g, '')
 
 const OWNER_SET = new Set(
-  (global.owner || []).map(v => DIGITS(Array.isArray(v) ? v[0] : v))
+  (global.owner || []).map(v =>
+    DIGITS(decodeJid(Array.isArray(v) ? v[0] : v))
+  )
 )
 
 const BOT_NUMBER = DIGITS(decodeJid(global.conn?.user?.id))
@@ -50,7 +52,7 @@ function handleMessage(raw) {
   if (plugin.group && !m.isGroup)
     return global.dfail('group', m, this)
 
-  const senderNum = DIGITS(m.sender)
+  const senderNum = DIGITS(decodeJid(m.sender))
   const isROwner = OWNER_SET.has(senderNum)
   const isOwner = isROwner || m.fromMe
 
@@ -61,26 +63,26 @@ function handleMessage(raw) {
     return global.dfail('owner', m, this)
 
   let isAdmin = false
-let isBotAdmin = false
-let participants = null
-let groupMetadata = null
+  let isBotAdmin = false
+  let participants = null
+  let groupMetadata = null
 
-if (m.isGroup) {
-  const info = global.groupCache?.get(m.chat)
+  if (m.isGroup) {
+    const info = global.groupCache?.get(m.chat)
 
-  if (info) {
-    participants = info.participants
-    groupMetadata = info.meta
-    isAdmin = info.admins.has(senderNum)
-    isBotAdmin = info.botAdmin
+    if (info) {
+      participants = info.participants
+      groupMetadata = info.meta
+      isAdmin = info.admins.has(senderNum)
+      isBotAdmin = info.botAdmin
+    }
+
+    if (plugin.admin && !isAdmin)
+      return global.dfail('admin', m, this)
+
+    if (plugin.botAdmin && !isBotAdmin)
+      return global.dfail('botAdmin', m, this)
   }
-
-  if (plugin.admin && !isAdmin)
-    return global.dfail('admin', m, this)
-
-  if (plugin.botAdmin && !isBotAdmin)
-    return global.dfail('botAdmin', m, this)
-}
 
   const args = space === -1 ? [] : text.slice(space + 1).split(/\s+/)
 
