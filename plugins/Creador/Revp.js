@@ -1,52 +1,64 @@
 import fs from 'fs'
 import path from 'path'
+import syntaxerror from 'syntax-error'
 
-const handler = async (m, { conn }) => {
-  const pluginRoot = path.join(process.cwd(), 'plugins')
+const handler = async (m) => {
+  const base = process.cwd()
+  const pluginsDir = path.join(base, 'plugins')
 
   let total = 0
-  let errores = []
+  let conError = 0
+  let lista = []
 
-  function revisar(dir) {
-    for (const file of fs.readdirSync(dir)) {
+  function scan(dir) {
+    const files = fs.readdirSync(dir)
+    for (const file of files) {
       const full = path.join(dir, file)
 
       if (fs.statSync(full).isDirectory()) {
-        revisar(full)
-      } else if (file.endsWith('.js')) {
-        total++
+        scan(full)
+        continue
+      }
 
-        const err = syntaxerror(
-          fs.readFileSync(full),
-          file,
-          { sourceType: 'module', allowAwaitOutsideFunction: true }
+      if (!file.endsWith('.js')) continue
+
+      total++
+
+      const src = fs.readFileSync(full)
+      const err = syntaxerror(
+        src,
+        file,
+        { sourceType: 'module', allowAwaitOutsideFunction: true }
+      )
+
+      if (err) {
+        conError++
+        lista.push(
+          `✗ ${path.relative(pluginsDir, full)}\n${err.message}`
         )
-
-        if (err) {
-          errores.push(`✗ ${path.relative(pluginRoot, full)}\n${err.message}`)
-        }
       }
     }
   }
 
-  revisar(pluginRoot)
+  scan(pluginsDir)
 
   let text = `📦 *REVISIÓN DE PLUGINS*\n\n`
-  text += `• Total encontrados: *${total}*\n`
-  text += `• Con errores: *${errores.length}*\n\n`
+  text += `• Total: *${total}*\n`
+  text += `• Con errores: *${conError}*\n\n`
 
-  if (errores.length) {
+  if (lista.length) {
     text += `⚠️ *Errores detectados:*\n\n`
-    text += errores.join('\n\n')
+    text += lista.join('\n\n')
   } else {
     text += `✅ No se detectaron errores de sintaxis`
   }
 
-  m.reply(text)
+  await m.reply(text)
 }
 
 handler.command = ['revp']
 handler.owner = true
-handler.help = ['𝖱𝖾𝗏𝗉']
-handler.tags = ['𝖮𝖶𝖭𝖤𝖱']
+handler.help = ['revp']
+handler.tags = ['owner']
+
 export default handler
