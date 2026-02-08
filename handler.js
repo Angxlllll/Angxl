@@ -5,14 +5,12 @@ import { fileURLToPath } from 'url'
 const DIGITS = s => String(s || '').replace(/\D/g, '')
 
 const OWNER_SET = new Set(
-  (global.owner || []).map(v =>
-    DIGITS(Array.isArray(v) ? v[0] : v)
-  )
+  (global.owner || []).map(v => DIGITS(Array.isArray(v) ? v[0] : v))
 )
 
 global.dfail = async (type, m, conn) => {
   const msg = {
-    rowner: '𝖤𝗌𝗍𝖾 𝖢𝗈𝗆𝖺𝗇𝖽𝗈 𝖲𝗈𝗅𝗈 𝖯𝗎𝖾𝖽𝖾 𝖲𝖾𝗋 𝖴𝗌𝖺𝖽𝗈 𝖯𝗈𝗋 𝖬𝗂 𝖢𝗋𝖾𝖺𝖽𝗈𝗋',
+        rowner: '𝖤𝗌𝗍𝖾 𝖢𝗈𝗆𝖺𝗇𝖽𝗈 𝖲𝗈𝗅𝗈 𝖯𝗎𝖾𝖽𝖾 𝖲𝖾𝗋 𝖴𝗌𝖺𝖽𝗈 𝖯𝗈𝗋 𝖬𝗂 𝖢𝗋𝖾𝖺𝖽𝗈𝗋',
     owner: '𝖤𝗌𝗍𝖾 𝖢𝗈𝗆𝖺𝗇𝖽𝗈 𝖲𝗈𝗅𝗈 𝖯𝗎𝖾𝖽𝖾 𝖲𝖾𝗋 𝖴𝗍𝗂𝗅𝗂𝗓𝖺𝖽𝗈 𝖯𝗈𝗋 𝖬𝗂 𝖢𝗋𝖾𝖺𝖽𝗈𝗋',
     admin: '𝖤𝗌𝗍𝖾 𝖢𝗈𝗆𝖺𝗇𝖽𝗈 𝖲𝗈𝗅𝗈 𝖯𝗎𝖾𝖽𝖾 𝖲𝖾𝗋 𝖴𝗌𝖺𝖽𝗈 𝖯𝗈𝗋 𝖠𝖽𝗆𝗂𝗌𝗍𝗋𝖺𝖽𝗈𝗋𝖾𝗌',
     botAdmin: '𝖭𝖾𝖼𝗌𝗂𝗍𝗈 𝗌𝖾𝗋 𝖠𝖽𝗆𝗂𝗇'
@@ -23,6 +21,20 @@ global.dfail = async (type, m, conn) => {
 Object.freeze(global.dfail)
 
 global.groupAdmins ||= new Map()
+
+const GROUP_META_CACHE = new Map()
+const GROUP_META_TTL = 30000
+
+export function bindGroupEvents(conn) {
+  conn.ev.on('group-participants.update', ({ id, participants, action }) => {
+    const admins = global.groupAdmins.get(id)
+    if (!admins) return
+    for (const p of participants) {
+      const n = DIGITS(decodeJid(p))
+      action === 'promote' ? admins.add(n) : admins.delete(n)
+    }
+  })
+}
 
 export function handler(chatUpdate) {
   if (!chatUpdate?.messages) return
@@ -35,14 +47,13 @@ async function handleMessage(raw) {
   const m = smsg(this, raw)
   if (!m || m.isBaileys || !m.text) return
 
-  const text = m.text.trim()
-
   this.botNum ||= DIGITS(decodeJid(this.user.id))
   m.senderNum ||= DIGITS(decodeJid(m.sender))
 
   const isROwner = OWNER_SET.has(m.senderNum)
   const isOwner = isROwner || m.fromMe
 
+  let text = m.text.trim()
   let usedPrefix = ''
   let body = text
 
@@ -62,26 +73,25 @@ async function handleMessage(raw) {
   const i = body.indexOf(' ')
   if (i !== -1) {
     command = body.slice(0, i)
-    args = body.slice(i + 1).trim().split(/\s+/).filter(Boolean)
+    args = body.slice(i + 1).trim().split(/\s+/)
   }
 
-  command = command.toLowerCase().replace(/[\u200B-\u200D\uFEFF]/g, '')
+  command = command.toLowerCase()
 
   if (command === 'on' && args[0] === 'sinprefix') {
     if (!isOwner) return global.dfail('owner', m, this)
     global.sinprefix = true
-    return this.sendMessage(m.chat, { text: '✅ sinprefix activado' }, { quoted: m })
+    return this.sendMessage(m.chat, { text: 'sinprefix activado' }, { quoted: m })
   }
 
   if (command === 'off' && args[0] === 'sinprefix') {
     if (!isOwner) return global.dfail('owner', m, this)
     global.sinprefix = false
-    return this.sendMessage(m.chat, { text: '❌ sinprefix desactivado' }, { quoted: m })
+    return this.sendMessage(m.chat, { text: 'sinprefix desactivado' }, { quoted: m })
   }
 
   const plugin = global.COMMAND_MAP?.get(command)
   if (!plugin || plugin.disabled) return
-  if (plugin.group && !m.isGroup) return
 
   if (plugin.rowner && !isROwner)
     return global.dfail('rowner', m, this)
@@ -95,7 +105,15 @@ async function handleMessage(raw) {
   let groupMetadata
 
   if (m.isGroup && (plugin.admin || plugin.botAdmin)) {
-    groupMetadata = await this.groupMetadata(m.chat)
+    let cached = GROUP_META_CACHE.get(m.chat)
+    if (!cached || Date.now() - cached.time > GROUP_META_TTL) {
+      groupMetadata = await this.groupMetadata(m.chat)
+      cached = { data: groupMetadata, time: Date.now() }
+      GROUP_META_CACHE.set(m.chat, cached)
+    } else {
+      groupMetadata = cached.data
+    }
+
     participants = groupMetadata.participants
 
     let admins = global.groupAdmins.get(m.chat)
@@ -122,21 +140,19 @@ async function handleMessage(raw) {
   if (!exec) return
 
   setImmediate(() => {
-    Promise.resolve(
-      exec.call(this, m, {
-        conn: this,
-        args,
-        command,
-        usedPrefix,
-        participants,
-        groupMetadata,
-        isROwner,
-        isOwner,
-        isAdmin,
-        isBotAdmin,
-        chat: m.chat
-      })
-    ).catch(() => {})
+    exec.call(this, m, {
+      conn: this,
+      args,
+      command,
+      usedPrefix,
+      participants,
+      groupMetadata,
+      isROwner,
+      isOwner,
+      isAdmin,
+      isBotAdmin,
+      chat: m.chat
+    })
   })
 }
 
