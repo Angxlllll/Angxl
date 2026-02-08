@@ -54,24 +54,19 @@ async function handleMessage(raw) {
   if (!m || m.isBaileys || !m.text) return
 
   const text = m.text
-  const first = text[0]
-
-  if (first !== '.' && first !== '!') return
+  const prefix = text[0]
+  if (prefix !== '.' && prefix !== '!') return
 
   this.botNum ||= DIGITS(decodeJid(this.user.id))
   m.senderNum ||= DIGITS(decodeJid(m.sender))
 
-  let plugin = null
-  let command = null
-  let usedPrefix = first
-
   const body = text.slice(1).trim()
   const space = body.indexOf(' ')
-  command = (space === -1 ? body : body.slice(0, space))
+  const command = (space === -1 ? body : body.slice(0, space))
     .toLowerCase()
     .replace(/[\u200B-\u200D\uFEFF]/g, '')
 
-  plugin = global.COMMAND_MAP?.get(command)
+  let plugin = global.COMMAND_MAP?.get(command)
 
   if (!plugin && global._customPrefixPlugins?.length) {
     for (const p of global._customPrefixPlugins) {
@@ -96,18 +91,24 @@ async function handleMessage(raw) {
   if (plugin.owner && !isOwner)
     return global.dfail('owner', m, this)
 
-  let isAdmin = false
-  let isBotAdmin = false
   let participants = null
   let groupMetadata = null
+  let isAdmin = false
+  let isBotAdmin = false
 
-  if (m.isGroup) {
+  const needsMeta =
+    m.isGroup &&
+    (plugin.admin ||
+     plugin.botAdmin ||
+     plugin.participants ||
+     plugin.groupMetadata)
+
+  if (needsMeta) {
     const meta = await this.groupMetadata(m.chat)
     participants = meta.participants
     groupMetadata = meta
 
     let admins = global.groupAdmins.get(m.chat)
-
     if (!admins) {
       admins = new Set(
         meta.participants
@@ -131,22 +132,20 @@ async function handleMessage(raw) {
   const exec = plugin.exec || plugin.default || plugin
   if (!exec) return
 
-  queueMicrotask(() => {
-    exec.call(this, m, {
-      conn: this,
-      args,
-      command,
-      usedPrefix,
-      participants,
-      groupMetadata,
-      isROwner,
-      isOwner,
-      isAdmin,
-      isBotAdmin,
-      chat: m.chat
-    }).catch(e => {
-      m.reply(`❌ Error:\n${e.message}`)
-    })
+  exec.call(this, m, {
+    conn: this,
+    args,
+    command,
+    usedPrefix: prefix,
+    participants,
+    groupMetadata,
+    isROwner,
+    isOwner,
+    isAdmin,
+    isBotAdmin,
+    chat: m.chat
+  }).catch(e => {
+    m.reply(`❌ Error:\n${e.message}`)
   })
 }
 
