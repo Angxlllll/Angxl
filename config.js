@@ -1,5 +1,10 @@
 import { fileURLToPath } from 'url'
 import path from 'path'
+import yargs from 'yargs'
+
+global.opts = yargs(process.argv.slice(2))
+  .exitProcess(false)
+  .parse()
 
 const OWNER = Object.freeze([
   '5714222810',
