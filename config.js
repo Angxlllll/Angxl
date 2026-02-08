@@ -47,5 +47,3 @@ global.__filename = p => fileURLToPath(p)
 
 global.prefixes = Object.freeze(['.', '!', '#', '/'])
 global.sinprefix = false
-
-Object.freeze(global)
