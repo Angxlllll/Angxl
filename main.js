@@ -61,7 +61,6 @@ global.plugins = Object.create(null)
 global.pluginCommandIndex = new Map()
 global._customPrefixPlugins = []
 global.COMMAND_MAP = new Map()
-global.groupCache = new Map()
 
 function rebuildPluginIndex() {
   global.pluginCommandIndex.clear()
@@ -108,23 +107,6 @@ async function loadPlugins(dir) {
 }
 
 let handler = await import('./handler.js')
-
-function cacheGroup(meta, sock) {
-  const admins = new Set()
-  for (const p of meta.participants) {
-    if (p.admin) admins.add(p.id.replace(/\D/g, ''))
-  }
-
-  const botNum = sock.user.id.replace(/\D/g, '')
-  const botAdmin = admins.has(botNum)
-
-  global.groupCache.set(meta.id, {
-    admins,
-    botAdmin,
-    participants: meta.participants,
-    meta
-  })
-}
 
 async function startSock() {
   const sock = makeWASocket({
@@ -199,18 +181,6 @@ async function startSock() {
       console.log(chalk.greenBright('\nCódigo de vinculación:\n'))
       console.log(chalk.bold(code.match(/.{1,4}/g).join(' ')))
     }
-  })
-
-  sock.ev.on('groups.update', async groups => {
-    for (const g of groups) {
-      const meta = await sock.groupMetadata(g.id)
-      cacheGroup(meta, sock)
-    }
-  })
-
-  sock.ev.on('group-participants.update', async ({ id }) => {
-    const meta = await sock.groupMetadata(id)
-    cacheGroup(meta, sock)
   })
 
   function onConnectionUpdate(update) {
