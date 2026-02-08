@@ -42,59 +42,31 @@ const countryFlags = Object.freeze({
   '976': '🇲🇳','977': '🇳🇵'
 })
 
-const prefixes = Object.keys(countryFlags).sort((a, b) => b.length - a.length)
-const flagCache = new Map()
-
-const getFlag = num => {
-  let v = flagCache.get(num)
-  if (v) return v
-  let f = '🏳️'
-  for (const p of prefixes) {
-    if (num.startsWith(p)) {
-      f = countryFlags[p]
-      break
-    }
-  }
-  flagCache.set(num, f)
-  return f
-}
-
-const handler = async (m, { conn, participants }) => {
-  if (!m.isGroup) return
-
-  if (!participants || !participants.length) {
-    const meta = await conn.groupMetadata(m.chat)
-    participants = meta.participants
+  const getCountryPrefix = jid => {
+    const phone = jid.split('@')[0].replace(/^0+/, '')
+    const prefixes = Object.keys(countryFlags).sort((a, b) => b.length - a.length)
+    for (let p of prefixes) if (phone.startsWith(p)) return p
+    return 'other'
   }
 
-  conn.sendMessage(m.chat, { react: { text: '🗣️', key: m.key } })
+  await conn.sendMessage(m.chat, {
+    react: { text: '🗣️', key: m.key }
+  })
 
-  const lines = []
-  const mentions = []
+  let teks = `*!  MENCION GENERAL  !*\n*PARA ${participants.length} MIEMBROS* 🗣️\n\n`
 
   for (const p of participants) {
-  let jid = p.id || p.jid
-  if (!jid) continue
-
-  jid = conn.decodeJid(jid)
-
-  if (!jid.endsWith('@s.whatsapp.net')) continue
-
-  const num = jid.split('@')[0]
-
-  lines.push(`┊» ${getFlag(num)} @${num}`)
-  mentions.push(jid)
-}
-
-  const text =
-`!  MENCION GENERAL  !
-PARA ${mentions.length} MIEMBROS 🗣️
-
-${lines.join('\n')}`
+    const jid = p.jid || p.id
+    const prefix = getCountryPrefix(jid)
+    teks += `${emoji} ${countryFlags[prefix] || '🏳️'} @${jid.split('@')[0]}\n`
+  }
 
   await conn.sendMessage(
     m.chat,
-    { text, mentions },
+    {
+      text: teks,
+      mentions: participants.map(p => p.jid || p.id)
+    },
     { quoted: m }
   )
 }
