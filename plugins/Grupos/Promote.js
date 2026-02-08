@@ -1,8 +1,5 @@
 const handler = async (m, { conn, participants }) => {
-  const target =
-    m.mentionedJid?.[0] ||
-    m.quoted?.sender
-
+  const target = m.mentionedJid?.[0] || m.quoted?.sender
   if (!target)
     return conn.sendMessage(
       m.chat,
@@ -10,14 +7,7 @@ const handler = async (m, { conn, participants }) => {
       { quoted: m }
     )
 
-  let participant
-  for (let i = 0, l = participants.length; i < l; i++) {
-    if (participants[i].id === target) {
-      participant = participants[i]
-      break
-    }
-  }
-
+  const participant = participants.find(p => p.id === target)
   if (!participant)
     return conn.sendMessage(
       m.chat,
@@ -29,22 +19,18 @@ const handler = async (m, { conn, participants }) => {
     return conn.sendMessage(
       m.chat,
       {
-        text: `ℹ️ @${target.slice(0, target.indexOf('@'))} *ya era admin*.`,
+        text: `ℹ️ @${target.split('@')[0]} *ya era admin*.`,
         mentions: [target]
       },
       { quoted: m }
     )
 
-  await conn.groupParticipantsUpdate(
-    m.chat,
-    [target],
-    'promote'
-  )
+  await conn.groupParticipantsUpdate(m.chat, [target], 'promote')
 
   return conn.sendMessage(
     m.chat,
     {
-      text: `✅ *Admin dado a:* @${target.slice(0, target.indexOf('@'))}`,
+      text: `✅ *Admin dado a:* @${target.split('@')[0]}`,
       mentions: [target]
     },
     { quoted: m }
@@ -53,8 +39,8 @@ const handler = async (m, { conn, participants }) => {
 
 handler.group = true
 handler.admin = true
-handler.customPrefix = /^\.?(promote|daradmin|addadmin)/i
-handler.help = ['promote']
+handler.command = ['promote']
 handler.tags = ['grupos']
+handler.help = ['promote']
 
 export default handler
