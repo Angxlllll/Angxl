@@ -146,21 +146,26 @@ async function startSock() {
           fs.unlinkSync(file)
         } catch {}
       }
-    }
 
-    if (
-      option === '2' &&
-      !pairingRequested &&
-      !fs.existsSync(`./${SESSION_DIR}/creds.json`) &&
-      (connection === 'connecting' || connection === 'open')
-    ) {
-      pairingRequested = true
-      console.log(chalk.cyanBright('\nIngresa tu número con código país'))
-      phoneNumber = await question('--> ')
-      const clean = phoneNumber.replace(/\D/g, '')
-      const code = await sock.requestPairingCode(clean)
-      console.log(chalk.greenBright('\nCódigo de vinculación:\n'))
-      console.log(chalk.bold(code.match(/.{1,4}/g).join(' ')))
+      if (
+        option === '2' &&
+        !pairingRequested &&
+        !fs.existsSync(`./${SESSION_DIR}/creds.json`)
+      ) {
+        pairingRequested = true
+
+        console.log(chalk.cyanBright('\nIngresa tu número con código país'))
+        phoneNumber = await question('--> ')
+        const clean = phoneNumber.replace(/\D/g, '')
+
+        try {
+          const code = await sock.requestPairingCode(clean)
+          console.log(chalk.greenBright('\nCódigo de vinculación:\n'))
+          console.log(chalk.bold(code.match(/.{1,4}/g).join(' ')))
+        } catch (e) {
+          console.error('Pairing error:', e)
+        }
+      }
     }
   })
 
