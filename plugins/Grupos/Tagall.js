@@ -1,4 +1,4 @@
-import { decodeJid } from '../lib/simple.js'
+import { decodeJid } from '../../lib/simple.js'
 
 const FLAGS = {
   '52': '🇲🇽',
