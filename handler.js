@@ -10,9 +10,9 @@ const OWNER_SET = new Set(
 
 global.dfail = async (type, m, conn) => {
   const msg = {
-        rowner: '𝖤𝗌𝗍𝖾 𝖢𝗈𝗆𝖺𝗇𝖽𝗈 𝖲𝗈𝗅𝗈 𝖯𝗎𝖾𝖽𝖾 𝖲𝖾𝗋 𝖴𝗌𝖺𝖽𝗈 𝖯𝗈𝗋 𝖬𝗂 𝖢𝗋𝖾𝖺𝖽𝗈𝗋',
+    rowner: '𝖤𝗌𝗍𝖾 𝖢𝗈𝗆𝖺𝗇𝖽𝗈 𝖲𝗈𝗅𝗈 𝖯𝗎𝖾𝖽𝖾 𝖲𝖾𝗋 𝖴𝗌𝗋𝗋𝗋 𝗎𝗌𝗂𝗌𝗍𝗋𝗋𝗂𝗍𝗋𝗋𝗋𝗈',
     owner: '𝖤𝗌𝗍𝖾 𝖢𝗈𝗆𝖺𝗇𝖽𝗈 𝖲𝗈𝗅𝗈 𝖯𝗎𝖾𝖽𝖾 𝖲𝖾𝗋 𝖴𝗍𝗂𝗅𝗂𝗓𝖺𝖽𝗈 𝖯𝗈𝗋 𝖬𝗂 𝖢𝗋𝖾𝖺𝖽𝗈𝗋',
-    admin: '𝖤𝗌𝗍𝖾 𝖢𝗈𝗆𝖺𝗇𝖽𝗈 𝖲𝗈𝗅𝗈 𝖯𝗎𝖾𝖽𝖾 𝖲𝖾𝗋 𝖴𝗌𝖺𝖽𝗈 𝖯𝗈𝗋 𝖠𝖽𝗆𝗂𝗌𝗍𝗋𝖺𝖽𝗈𝗋𝖾𝗌',
+    admin: '𝖤𝗌𝗍𝖾 𝖢𝗈𝗆𝖺𝗇𝖽𝗈 𝖲𝗈𝗅𝗈 𝖯𝗎𝖾𝖽𝖾 𝖲𝖾𝗋 𝖴𝗌𝗋𝗋𝗋 𝗎𝗌𝗂𝗌𝗍𝗋𝗋𝗂𝗍𝗋𝗋𝗋𝗈',
     botAdmin: '𝖭𝖾𝖼𝗌𝗂𝗍𝗈 𝗌𝖾𝗋 𝖠𝖽𝗆𝗂𝗇'
   }[type]
   if (msg) conn.sendMessage(m.chat, { text: msg }, { quoted: m })
@@ -53,19 +53,15 @@ async function handleMessage(raw) {
   const isROwner = OWNER_SET.has(m.senderNum)
   const isOwner = isROwner || m.fromMe
 
-  let text = m.text.trim()
-  let usedPrefix = ''
-  let body = text
-
+  const text = m.text.trim()
   const c = text.charCodeAt(0)
   const hasPrefix = c === 46 || c === 33
 
-  if (hasPrefix) {
-    usedPrefix = text[0]
-    body = text.slice(1).trim()
-  } else if (!global.sinprefix) {
-    return
-  }
+  if (!hasPrefix && !global.sinprefix) return
+  if (!global.COMMAND_MAP) return
+
+  const usedPrefix = hasPrefix ? text[0] : ''
+  const body = hasPrefix ? text.slice(1).trim() : text
 
   let command = body
   let args = []
@@ -90,14 +86,11 @@ async function handleMessage(raw) {
     return this.sendMessage(m.chat, { text: 'sinprefix desactivado' }, { quoted: m })
   }
 
-  const plugin = global.COMMAND_MAP?.get(command)
+  const plugin = global.COMMAND_MAP.get(command)
   if (!plugin || plugin.disabled) return
 
-  if (plugin.rowner && !isROwner)
-    return global.dfail('rowner', m, this)
-
-  if (plugin.owner && !isOwner)
-    return global.dfail('owner', m, this)
+  if (plugin.rowner && !isROwner) return global.dfail('rowner', m, this)
+  if (plugin.owner && !isOwner) return global.dfail('owner', m, this)
 
   let isAdmin = false
   let isBotAdmin = false
@@ -118,40 +111,41 @@ async function handleMessage(raw) {
 
     let admins = global.groupAdmins.get(m.chat)
     if (!admins) {
-      admins = new Set(
-        participants
-          .filter(p => p.admin)
-          .map(p => DIGITS(decodeJid(p.id)))
-      )
+      admins = new Set()
+      for (const p of participants) {
+        if (p.admin) admins.add(DIGITS(decodeJid(p.id)))
+      }
       global.groupAdmins.set(m.chat, admins)
     }
 
     isAdmin = admins.has(m.senderNum)
     isBotAdmin = admins.has(this.botNum)
 
-    if (plugin.admin && !isAdmin)
-      return global.dfail('admin', m, this)
-
-    if (plugin.botAdmin && !isBotAdmin)
-      return global.dfail('botAdmin', m, this)
+    if (plugin.admin && !isAdmin) return global.dfail('admin', m, this)
+    if (plugin.botAdmin && !isBotAdmin) return global.dfail('botAdmin', m, this)
   }
 
   const exec = plugin.exec || plugin.default || plugin
   if (!exec) return
 
-  exec.call(this, m, {
-  conn: this,
-  args,
-  command,
-  usedPrefix,
-  participants,
-  groupMetadata,
-  isROwner,
-  isOwner,
-  isAdmin,
-  isBotAdmin,
-  chat: m.chat
- })
+  const ctx = m.ctx ||= {}
+  ctx.conn = this
+  ctx.args = args
+  ctx.command = command
+  ctx.usedPrefix = usedPrefix
+  ctx.participants = participants
+  ctx.groupMetadata = groupMetadata
+  ctx.isROwner = isROwner
+  ctx.isOwner = isOwner
+  ctx.isAdmin = isAdmin
+  ctx.isBotAdmin = isBotAdmin
+  ctx.chat = m.chat
+
+  try {
+    await exec.call(this, m, ctx)
+  } catch (e) {
+    console.error('Error en exec:', e)
+  }
 }
 
 if (process.env.NODE_ENV === 'development') {
