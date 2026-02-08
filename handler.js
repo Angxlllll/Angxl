@@ -42,6 +42,18 @@ export function bindGroupEvents(conn) {
       else if (action === 'demote') admins.delete(num)
     }
   })
+
+  conn.ev.on('groups.update', async ([g]) => {
+    if (!g?.id) return
+    const meta = await conn.groupMetadata(g.id)
+    const admins = new Set(
+      meta.participants
+        .filter(p => p.admin)
+        .map(p => DIGITS(decodeJid(p.id)))
+    )
+    global.groupAdmins.set(g.id, admins)
+    GROUP_META_CACHE.set(g.id, { data: meta, time: Date.now() })
+  })
 }
 
 export function handler(chatUpdate) {
@@ -56,22 +68,31 @@ async function handleMessage(raw) {
   if (!m || m.isBaileys || !m.text) return
 
   const text = m.text
-  const prefix = text[0]
-  if (prefix !== '.' && prefix !== '!') return
+  const c = text.charCodeAt(0)
+  if (c !== 46 && c !== 33) return
 
   this.botNum ||= DIGITS(decodeJid(this.user.id))
   m.senderNum ||= DIGITS(decodeJid(m.sender))
 
   const body = text.slice(1).trim()
-  const space = body.indexOf(' ')
-  const command = (space === -1 ? body : body.slice(0, space))
-    .toLowerCase()
-    .replace(/[\u200B-\u200D\uFEFF]/g, '')
+  let command = body
+  let args = []
 
-  let plugin = global.COMMAND_MAP?.get(command)
+  const i = body.indexOf(' ')
+  if (i !== -1) {
+    command = body.slice(0, i)
+    args = body.slice(i + 1).trim().split(/\s+/).filter(Boolean)
+  }
 
+  command = command.toLowerCase().replace(/[\u200B-\u200D\uFEFF]/g, '')
+
+  const plugin = global.COMMAND_MAP?.get(command)
   if (!plugin || plugin.disabled) return
   if (plugin.group && !m.isGroup) return
+
+  if (plugin.fastReply) {
+    this.sendMessage(m.chat, { text: plugin.fastReply }, { quoted: m })
+  }
 
   const isROwner = OWNER_SET.has(m.senderNum)
   const isOwner = isROwner || m.fromMe
@@ -118,26 +139,25 @@ async function handleMessage(raw) {
       return global.dfail('botAdmin', m, this)
   }
 
-  const args = body.slice(command.length).trim().split(/\s+/).filter(Boolean)
   const exec = plugin.exec || plugin.default || plugin
   if (!exec) return
 
-  Promise.resolve(
-    exec.call(this, m, {
-      conn: this,
-      args,
-      command,
-      usedPrefix: prefix,
-      participants,
-      groupMetadata,
-      isROwner,
-      isOwner,
-      isAdmin,
-      isBotAdmin,
-      chat: m.chat
-    })
-  ).catch(e => {
-    m.reply(`❌ Error:\n${e.message}`)
+  setImmediate(() => {
+    Promise.resolve(
+      exec.call(this, m, {
+        conn: this,
+        args,
+        command,
+        usedPrefix: text[0],
+        participants,
+        groupMetadata,
+        isROwner,
+        isOwner,
+        isAdmin,
+        isBotAdmin,
+        chat: m.chat
+      })
+    ).catch(() => {})
   })
 }
 
