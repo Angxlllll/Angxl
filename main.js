@@ -6,6 +6,7 @@ import readline from 'readline'
 import chalk from 'chalk'
 import pino from 'pino'
 import NodeCache from 'node-cache'
+import yargs from 'yargs'
 import { fileURLToPath } from 'url'
 
 import * as baileys from '@whiskeysockets/baileys'
@@ -15,17 +16,15 @@ const {
   makeWASocket,
   DisconnectReason,
   useMultiFileAuthState,
+  fetchLatestBaileysVersion,
   makeCacheableSignalKeyStore
 } = baileys
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 const SESSION_DIR = global.sessions || 'sessions'
-const CREDS_FILE = `./${SESSION_DIR}/creds.json`
-
 const { state, saveCreds } = await useMultiFileAuthState(SESSION_DIR)
-
-const version = [2, 2413, 1]
+const { version } = await fetchLatestBaileysVersion()
 
 const msgRetryCounterCache = new NodeCache({ stdTTL: 30 })
 const userDevicesCache = new NodeCache({ stdTTL: 120 })
@@ -39,9 +38,8 @@ const question = q => new Promise(r => rl.question(q, r))
 
 let option = process.argv.includes('qr') ? '1' : null
 let phoneNumber = global.botNumber
-let pairingDone = false
 
-if (!option && !phoneNumber && !fs.existsSync(CREDS_FILE)) {
+if (!option && !phoneNumber && !fs.existsSync(`./${SESSION_DIR}/creds.json`)) {
   do {
     option = await question(
       chalk.bold.white('Seleccione una opción:\n') +
@@ -51,19 +49,16 @@ if (!option && !phoneNumber && !fs.existsSync(CREDS_FILE)) {
   } while (!/^[12]$/.test(option))
 }
 
-if (option === '2' && !phoneNumber && !fs.existsSync(CREDS_FILE)) {
-  console.log(chalk.cyanBright('\nIngresa tu número con código país'))
-  phoneNumber = await question('--> ')
-}
-
 const pluginRoot = path.join(__dirname, 'plugins')
 global.plugins = Object.create(null)
-global.COMMAND_MAP = new Map()
+global.pluginCommandIndex = new Map()
 global._customPrefixPlugins = []
+global.COMMAND_MAP = new Map()
 
 function rebuildPluginIndex() {
-  global.COMMAND_MAP.clear()
+  global.pluginCommandIndex.clear()
   global._customPrefixPlugins.length = 0
+  global.COMMAND_MAP.clear()
 
   for (const plugin of Object.values(global.plugins)) {
     if (!plugin || plugin.disabled) continue
@@ -78,6 +73,12 @@ function rebuildPluginIndex() {
 
     for (const c of cmds) {
       const cmd = c.toLowerCase()
+      let arr = global.pluginCommandIndex.get(cmd)
+      if (!arr) {
+        arr = []
+        global.pluginCommandIndex.set(cmd, arr)
+      }
+      arr.push(plugin)
       if (!global.COMMAND_MAP.has(cmd)) {
         global.COMMAND_MAP.set(cmd, plugin)
       }
@@ -122,13 +123,15 @@ async function startSock() {
     msgRetryCounterCache,
     userDevicesCache,
     version,
-    keepAliveIntervalMs: 60000
+    keepAliveIntervalMs: 55000
   })
 
   global.conn = sock
   store.bind(sock)
 
   sock.ev.on('creds.update', saveCreds)
+
+  let pairingRequested = false
 
   sock.ev.on('connection.update', async update => {
     const { connection } = update
@@ -137,22 +140,39 @@ async function startSock() {
       global.BOT_NUMBER = sock.user.id.replace(/\D/g, '')
       console.log(chalk.greenBright('✿ Conectado'))
 
-      if (
-        option === '2' &&
-        phoneNumber &&
-        !pairingDone &&
-        !fs.existsSync(CREDS_FILE)
-      ) {
-        pairingDone = true
+      const file = './lastRestarter.json'
+      if (fs.existsSync(file)) {
         try {
-          const clean = phoneNumber.replace(/\D/g, '')
-          const code = await sock.requestPairingCode(clean)
-          console.log(chalk.greenBright('\nCódigo de vinculación:\n'))
-          console.log(chalk.bold(code.match(/.{1,4}/g).join(' ')))
+          const data = JSON.parse(fs.readFileSync(file, 'utf-8'))
+          if (data?.chatId && data?.key) {
+            await sock.sendMessage(
+              data.chatId,
+              {
+                text: `✅ *${global.namebot} está en línea nuevamente* 🚀`,
+                edit: data.key
+              }
+            )
+          }
+          fs.unlinkSync(file)
         } catch (e) {
-          console.error('Error pairing:', e?.output?.payload?.message || e)
+          console.error(e)
         }
       }
+    }
+
+    if (
+      option === '2' &&
+      !pairingRequested &&
+      !fs.existsSync(`./${SESSION_DIR}/creds.json`) &&
+      (connection === 'connecting' || connection === 'open')
+    ) {
+      pairingRequested = true
+      console.log(chalk.cyanBright('\nIngresa tu número con código país'))
+      phoneNumber = await question('--> ')
+      const clean = phoneNumber.replace(/\D/g, '')
+      const code = await sock.requestPairingCode(clean)
+      console.log(chalk.greenBright('\nCódigo de vinculación:\n'))
+      console.log(chalk.bold(code.match(/.{1,4}/g).join(' ')))
     }
   })
 
@@ -172,7 +192,6 @@ async function startSock() {
   function onMessagesUpsert({ messages, type }) {
     if (type !== 'notify') return
     if (!messages?.length) return
-    if (!messages[0]?.message) return
     handler.handler.call(sock, { messages })
   }
 
