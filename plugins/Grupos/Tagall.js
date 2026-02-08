@@ -69,7 +69,6 @@ const countryFlags = Object.freeze({
     },
     { quoted: m }
   )
-}
 
 handler.help = ['todos']
 handler.tags = ['grupos']
