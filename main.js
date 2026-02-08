@@ -22,11 +22,6 @@ const {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
-global.prefixes = Object.freeze(
-  Array.isArray(global.prefixes)
-    ? global.prefixes
-    : ['.', '!', '#', '/']
-)
 
 const SESSION_DIR = global.sessions || 'sessions'
 const { state, saveCreds } = await useMultiFileAuthState(SESSION_DIR)
