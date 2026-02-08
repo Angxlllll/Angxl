@@ -8,13 +8,15 @@ const OWNER_SET = new Set(
   (global.owner || []).map(v => DIGITS(Array.isArray(v) ? v[0] : v))
 )
 
-global.dfail = async (type, m, conn) => {
-  const msg = {
-    rowner: '𝖤𝗌𝗍𝖾 𝖢𝗈𝗆𝖺𝗇𝖽𝗈 𝖲𝗈𝗅𝗈 𝖯𝗎𝖾𝖽𝖾 𝖲𝖾𝗋 𝖴𝗌𝗋𝗋𝗋 𝗎𝗌𝗂𝗌𝗍𝗋𝗋𝗂𝗍𝗋𝗋𝗋𝗈',
-    owner: '𝖤𝗌𝗍𝖾 𝖢𝗈𝗆𝖺𝗇𝖽𝗈 𝖲𝗈𝗅𝗈 𝖯𝗎𝖾𝖽𝖾 𝖲𝖾𝗋 𝖴𝗍𝗂𝗅𝗂𝗓𝖺𝖽𝗈 𝖯𝗈𝗋 𝖬𝗂 𝖢𝗋𝖾𝖺𝖽𝗈𝗋',
-    admin: '𝖤𝗌𝗍𝖾 𝖢𝗈𝗆𝖺𝗇𝖽𝗈 𝖲𝗈𝗅𝗈 𝖯𝗎𝖾𝖽𝖾 𝖲𝖾𝗋 𝖴𝗌𝗋𝗋𝗋 𝗎𝗌𝗂𝗌𝗍𝗋𝗋𝗂𝗍𝗋𝗋𝗋𝗈',
-    botAdmin: '𝖭𝖾𝖼𝗌𝗂𝗍𝗈 𝗌𝖾𝗋 𝖠𝖽𝗆𝗂𝗇'
-  }[type]
+const DFAIL_MSG = {
+  rowner: '𝖤𝗌𝗍𝖾 𝖢𝗈𝗆𝖺𝗇𝖽𝗈 𝖲𝗈𝗅𝗈 𝖯𝗎𝖾𝖽𝖾 𝖲𝖾𝗋 𝖴𝗌𝗋𝗋𝗋 𝗎𝗌𝗂𝗌𝗍𝗋𝗋𝗂𝗍𝗋𝗋𝗋𝗈',
+  owner: '𝖤𝗌𝗍𝖾 𝖢𝗈𝗆𝖺𝗇𝖽𝗈 𝖲𝗈𝗅𝗈 𝖯𝗎𝖾𝖽𝖾 𝖲𝖾𝗋 𝖴𝗍𝗂𝗅𝗂𝗓𝖺𝖽𝗈 𝖯𝗈𝗋 𝖬𝗂 𝖢𝗋𝖾𝖺𝖽𝗈𝗋',
+  admin: '𝖤𝗌𝗍𝖾 𝖢𝗈𝗆𝖺𝗇𝖽𝗈 𝖲𝗈𝗅𝗈 𝖯𝗎𝖾𝖽𝖾 𝖲𝖾𝗋 𝖴𝗌𝗋𝗋𝗋 𝗎𝗌𝗂𝗌𝗍𝗋𝗋𝗂𝗍𝗋𝗋𝗋𝗈',
+  botAdmin: '𝖭𝖾𝖼𝗌𝗂𝗍𝗈 𝗌𝖾𝗋 𝖠𝖽𝗆𝗂𝗇'
+}
+
+global.dfail = (type, m, conn) => {
+  const msg = DFAIL_MSG[type]
   if (msg) conn.sendMessage(m.chat, { text: msg }, { quoted: m })
 }
 
@@ -22,8 +24,8 @@ Object.freeze(global.dfail)
 
 global.groupAdmins ||= new Map()
 
-const GROUP_META_CACHE = new Map()
-const GROUP_META_TTL = 30000
+const GROUP_CACHE = new Map()
+const GROUP_TTL = 30000
 
 export function bindGroupEvents(conn) {
   conn.ev.on('group-participants.update', ({ id, participants, action }) => {
@@ -37,9 +39,10 @@ export function bindGroupEvents(conn) {
 }
 
 export function handler(chatUpdate) {
-  if (!chatUpdate?.messages) return
-  for (const raw of chatUpdate.messages) {
-    setImmediate(() => handleMessage.call(this, raw))
+  const messages = chatUpdate?.messages
+  if (!messages) return
+  for (const raw of messages) {
+    handleMessage.call(this, raw)
   }
 }
 
@@ -48,9 +51,9 @@ async function handleMessage(raw) {
   if (!m || m.isBaileys || !m.text) return
 
   this.botNum ||= DIGITS(decodeJid(this.user.id))
-  m.senderNum ||= DIGITS(decodeJid(m.sender))
+  const senderNum = DIGITS(decodeJid(m.sender))
 
-  const isROwner = OWNER_SET.has(m.senderNum)
+  const isROwner = OWNER_SET.has(senderNum)
   const isOwner = isROwner || m.fromMe
 
   const text = m.text.trim()
@@ -98,11 +101,11 @@ async function handleMessage(raw) {
   let groupMetadata
 
   if (m.isGroup && (plugin.admin || plugin.botAdmin)) {
-    let cached = GROUP_META_CACHE.get(m.chat)
-    if (!cached || Date.now() - cached.time > GROUP_META_TTL) {
+    let cached = GROUP_CACHE.get(m.chat)
+    if (!cached || Date.now() - cached.time > GROUP_TTL) {
       groupMetadata = await this.groupMetadata(m.chat)
       cached = { data: groupMetadata, time: Date.now() }
-      GROUP_META_CACHE.set(m.chat, cached)
+      GROUP_CACHE.set(m.chat, cached)
     } else {
       groupMetadata = cached.data
     }
@@ -118,7 +121,7 @@ async function handleMessage(raw) {
       global.groupAdmins.set(m.chat, admins)
     }
 
-    isAdmin = admins.has(m.senderNum)
+    isAdmin = admins.has(senderNum)
     isBotAdmin = admins.has(this.botNum)
 
     if (plugin.admin && !isAdmin) return global.dfail('admin', m, this)
@@ -128,18 +131,19 @@ async function handleMessage(raw) {
   const exec = plugin.exec || plugin.default || plugin
   if (!exec) return
 
-  const ctx = m.ctx ||= {}
-  ctx.conn = this
-  ctx.args = args
-  ctx.command = command
-  ctx.usedPrefix = usedPrefix
-  ctx.participants = participants
-  ctx.groupMetadata = groupMetadata
-  ctx.isROwner = isROwner
-  ctx.isOwner = isOwner
-  ctx.isAdmin = isAdmin
-  ctx.isBotAdmin = isBotAdmin
-  ctx.chat = m.chat
+  const ctx = {
+    conn: this,
+    args,
+    command,
+    usedPrefix,
+    participants,
+    groupMetadata,
+    isROwner,
+    isOwner,
+    isAdmin,
+    isBotAdmin,
+    chat: m.chat
+  }
 
   try {
     await exec.call(this, m, ctx)
