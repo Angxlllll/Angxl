@@ -139,21 +139,19 @@ async function handleMessage(raw) {
   const exec = plugin.exec || plugin.default || plugin
   if (!exec) return
 
-  setImmediate(() => {
-    exec.call(this, m, {
-      conn: this,
-      args,
-      command,
-      usedPrefix,
-      participants,
-      groupMetadata,
-      isROwner,
-      isOwner,
-      isAdmin,
-      isBotAdmin,
-      chat: m.chat
-    })
-  })
+  exec.call(this, m, {
+  conn: this,
+  args,
+  command,
+  usedPrefix,
+  participants,
+  groupMetadata,
+  isROwner,
+  isOwner,
+  isAdmin,
+  isBotAdmin,
+  chat: m.chat
+ })
 }
 
 if (process.env.NODE_ENV === 'development') {
