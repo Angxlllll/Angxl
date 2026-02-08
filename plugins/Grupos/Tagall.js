@@ -77,7 +77,7 @@ const handler = async (m, { conn, participants }) => {
   for (const p of participants) {
     let jid = p.id || p.jid
     if (!jid) continue
-    jid = conn.decodeJid(jid)
+    jid = decodeJid(jid)
     if (!jid.endsWith('@s.whatsapp.net')) continue
 
     const num = jid.split('@')[0]
