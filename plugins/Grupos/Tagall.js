@@ -49,9 +49,11 @@ const countryFlags = Object.freeze({
     return 'other'
   }
 
-  await conn.sendMessage(m.chat, {
-    react: { text: '🗣️', key: m.key }
-  })
+    await conn.sendMessage(
+    m.chat,
+    { react: { text: "✅", key: m.key } }
+  )
+}
 
   let teks = `*!  MENCION GENERAL  !*\n*PARA ${participants.length} MIEMBROS* 🗣️\n\n`
 
