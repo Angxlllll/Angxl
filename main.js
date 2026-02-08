@@ -198,18 +198,8 @@ async function startSock() {
 
   function onMessagesUpsert({ messages, type }) {
     if (type !== 'notify') return
-
-    const filtered = []
-    for (const msg of messages) {
-      if (!msg?.message) continue
-      if (msg.key?.fromMe) continue
-      if (msg.key?.id?.startsWith('BAE5')) continue
-      filtered.push(msg)
-    }
-
-    if (filtered.length) {
-      handler.handler.call(sock, { messages: filtered })
-    }
+    if (!messages?.length) return
+    handler.handler.call(sock, { messages })
   }
 
   async function reloadHandler() {
