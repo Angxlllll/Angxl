@@ -42,35 +42,65 @@ const countryFlags = Object.freeze({
   '976': '🇲🇳','977': '🇳🇵'
 })
 
-  const getCountryPrefix = jid => {
-    const phone = jid.split('@')[0].replace(/^0+/, '')
-    const prefixes = Object.keys(countryFlags).sort((a, b) => b.length - a.length)
-    for (let p of prefixes) if (phone.startsWith(p)) return p
-    return 'other'
-  }
+  const prefixes = Object.keys(countryFlags).sort((a, b) => b.length - a.length)
+const flagCache = new Map()
 
-    await conn.sendMessage(
-    m.chat,
-    { react: { text: "✅", key: m.key } }
-  )
+const getFlagFromJid = jid => {
+  if (!jid.endsWith('@s.whatsapp.net')) return '🏳️'
+  const num = jid.split('@')[0].replace(/^0+/, '')
+  let cached = flagCache.get(num)
+  if (cached) return cached
+  let flag = '🏳️'
+  for (const p of prefixes) {
+    if (num.startsWith(p)) {
+      flag = countryFlags[p]
+      break
+    }
+  }
+  flagCache.set(num, flag)
+  return flag
 }
 
-  let teks = `*!  MENCION GENERAL  !*\n*PARA ${participants.length} MIEMBROS* 🗣️\n\n`
+const handler = async (m, { conn, participants }) => {
+  if (!m.isGroup) return
+
+  if (!participants || !participants.length) {
+    const meta = await conn.groupMetadata(m.chat)
+    participants = meta.participants
+  }
+
+  conn.sendMessage(m.chat, { react: { text: '🗣️', key: m.key } })
+
+  const lines = []
+  const mentions = []
 
   for (const p of participants) {
-    const jid = p.jid || p.id
-    const prefix = getCountryPrefix(jid)
-    teks += `${emoji} ${countryFlags[prefix] || '🏳️'} @${jid.split('@')[0]}\n`
+    let jid = p.id || p.jid
+    if (!jid) continue
+    jid = conn.decodeJid(jid)
+    if (!jid.endsWith('@s.whatsapp.net')) continue
+
+    const num = jid.split('@')[0]
+    const flag = getFlagFromJid(jid)
+
+    lines.push(`┊» ${flag} @${num}`)
+    mentions.push(jid)
   }
+
+  if (!mentions.length) return
+
+  const text =
+`!  MENCION GENERAL  !
+PARA ${mentions.length} MIEMBROS 🗣️
+
+${lines.join('\n')}`
 
   await conn.sendMessage(
     m.chat,
-    {
-      text: teks,
-      mentions: participants.map(p => p.jid || p.id)
-    },
+    { text, mentions },
     { quoted: m }
   )
+}
 
 handler.help = ['todos']
 handler.tags = ['grupos']
