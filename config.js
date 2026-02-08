@@ -1,4 +1,5 @@
 import { fileURLToPath } from 'url'
+import path from 'path'
 
 const OWNER = Object.freeze([
   '5714222810',
@@ -37,4 +38,9 @@ global.banner = BOT.banner
 global.APIs = APIS
 global.APIKeys = API_KEYS
 
-global.__filename = path => fileURLToPath(path)
+global.__filename = p => fileURLToPath(p)
+
+global.prefix = /^[.!]/
+global.sinprefix = false
+
+Object.freeze(global)
