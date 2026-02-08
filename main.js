@@ -6,7 +6,6 @@ import readline from 'readline'
 import chalk from 'chalk'
 import pino from 'pino'
 import NodeCache from 'node-cache'
-import yargs from 'yargs'
 import { fileURLToPath } from 'url'
 
 import * as baileys from '@whiskeysockets/baileys'
@@ -16,16 +15,15 @@ const {
   makeWASocket,
   DisconnectReason,
   useMultiFileAuthState,
-  fetchLatestBaileysVersion,
   makeCacheableSignalKeyStore
 } = baileys
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
-
 const SESSION_DIR = global.sessions || 'sessions'
 const { state, saveCreds } = await useMultiFileAuthState(SESSION_DIR)
-const { version } = await fetchLatestBaileysVersion()
+
+const version = [2, 2413, 1]
 
 const msgRetryCounterCache = new NodeCache({ stdTTL: 30 })
 const userDevicesCache = new NodeCache({ stdTTL: 120 })
@@ -52,14 +50,12 @@ if (!option && !phoneNumber && !fs.existsSync(`./${SESSION_DIR}/creds.json`)) {
 
 const pluginRoot = path.join(__dirname, 'plugins')
 global.plugins = Object.create(null)
-global.pluginCommandIndex = new Map()
-global._customPrefixPlugins = []
 global.COMMAND_MAP = new Map()
+global._customPrefixPlugins = []
 
 function rebuildPluginIndex() {
-  global.pluginCommandIndex.clear()
-  global._customPrefixPlugins.length = 0
   global.COMMAND_MAP.clear()
+  global._customPrefixPlugins.length = 0
 
   for (const plugin of Object.values(global.plugins)) {
     if (!plugin || plugin.disabled) continue
@@ -74,12 +70,6 @@ function rebuildPluginIndex() {
 
     for (const c of cmds) {
       const cmd = c.toLowerCase()
-      let arr = global.pluginCommandIndex.get(cmd)
-      if (!arr) {
-        arr = []
-        global.pluginCommandIndex.set(cmd, arr)
-      }
-      arr.push(plugin)
       if (!global.COMMAND_MAP.has(cmd)) {
         global.COMMAND_MAP.set(cmd, plugin)
       }
@@ -124,11 +114,10 @@ async function startSock() {
     msgRetryCounterCache,
     userDevicesCache,
     version,
-    keepAliveIntervalMs: 55000
+    keepAliveIntervalMs: 60000
   })
 
   global.conn = sock
-  store.bind(sock)
 
   sock.ev.on('creds.update', saveCreds)
 
@@ -155,9 +144,7 @@ async function startSock() {
             )
           }
           fs.unlinkSync(file)
-        } catch (e) {
-          console.error(e)
-        }
+        } catch {}
       }
     }
 
@@ -193,6 +180,7 @@ async function startSock() {
   function onMessagesUpsert({ messages, type }) {
     if (type !== 'notify') return
     if (!messages?.length) return
+    if (!messages[0]?.message) return
     handler.handler.call(sock, { messages })
   }
 
