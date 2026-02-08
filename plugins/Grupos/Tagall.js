@@ -73,15 +73,18 @@ const handler = async (m, { conn, participants }) => {
   const mentions = []
 
   for (const p of participants) {
-    const jid = p.id || p.jid
-    if (!jid) continue
-    if (!jid.endsWith('@s.whatsapp.net')) continue
+  let jid = p.id || p.jid
+  if (!jid) continue
 
-    const num = jid.split('@')[0]
+  jid = conn.decodeJid(jid)
 
-    lines.push(`┊» ${getFlag(num)} @${num}`)
-    mentions.push(jid)
-  }
+  if (!jid.endsWith('@s.whatsapp.net')) continue
+
+  const num = jid.split('@')[0]
+
+  lines.push(`┊» ${getFlag(num)} @${num}`)
+  mentions.push(jid)
+}
 
   const text =
 `!  MENCION GENERAL  !
