@@ -67,14 +67,18 @@ async function handleMessage(raw) {
   const m = smsg(this, raw)
   if (!m || m.isBaileys || !m.text) return
 
-  const text = m.text
-  const c = text.charCodeAt(0)
-  if (c !== 46 && c !== 33) return
+  const text = m.text.trim()
+  const firstChar = text.charCodeAt(0)
+  const hasPrefix = firstChar === 46 || firstChar === 33
+
+  if (!hasPrefix && !global.sinprefix) return
 
   this.botNum ||= DIGITS(decodeJid(this.user.id))
   m.senderNum ||= DIGITS(decodeJid(m.sender))
 
-  const body = text.slice(1).trim()
+  let body = hasPrefix ? text.slice(1) : text
+  body = body.trim()
+
   let command = body
   let args = []
 
@@ -85,6 +89,18 @@ async function handleMessage(raw) {
   }
 
   command = command.toLowerCase().replace(/[\u200B-\u200D\uFEFF]/g, '')
+
+  // ====== ON / OFF SINPREFIX ======
+  if ((command === 'on' || command === 'off') && args[0] === 'sinprefix') {
+    const isOwner = OWNER_SET.has(m.senderNum) || m.fromMe
+    if (!isOwner) return global.dfail('owner', m, this)
+
+    global.sinprefix = command === 'on'
+    return m.reply(
+      `✅ Modo sin prefix ${global.sinprefix ? 'activado' : 'desactivado'}`
+    )
+  }
+  // ===============================
 
   const plugin = global.COMMAND_MAP?.get(command)
   if (!plugin || plugin.disabled) return
@@ -148,7 +164,7 @@ async function handleMessage(raw) {
         conn: this,
         args,
         command,
-        usedPrefix: text[0],
+        usedPrefix: hasPrefix ? text[0] : '',
         participants,
         groupMetadata,
         isROwner,
