@@ -21,7 +21,6 @@ const {
 } = baileys
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-global.opts = yargs(process.argv.slice(2)).exitProcess(false).parse()
 
 global.prefixes = Object.freeze(
   Array.isArray(global.prefixes)
