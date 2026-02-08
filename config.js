@@ -45,7 +45,7 @@ global.APIKeys = API_KEYS
 
 global.__filename = p => fileURLToPath(p)
 
-global.prefix = /^[.!]/
+global.prefixes = Object.freeze(['.', '!', '#', '/'])
 global.sinprefix = false
 
 Object.freeze(global)
