@@ -66,29 +66,31 @@ const getFlagFromJid = jid => {
 const handler = async (m, { conn, participants }) => {
   if (!m.isGroup) return
 
-  if (!participants || !participants.length) {
+  let members = participants
+
+  if (!members || !members.length) {
     const meta = await conn.groupMetadata(m.chat)
-    participants = meta.participants
+    members = meta.participants
   }
 
-  conn.sendMessage(m.chat, { react: { text: '🗣️', key: m.key } })
+  conn.sendMessage(m.chat, { react: { text: '🗣️', key: m.key } }).catch(() => {})
 
   const lines = []
   const mentions = []
 
-  for (const p of participants) {
-  let jid = p.id || p.jid
-  if (!jid) continue
+  for (const p of members) {
+    let jid = p.id || p.jid
+    if (!jid) continue
 
-  jid = decodeJid(jid)
-  if (!jid.endsWith('@s.whatsapp.net')) continue
+    jid = decodeJid(jid)
+    if (!jid.endsWith('@s.whatsapp.net')) continue
 
-  const num = jid.split('@')[0]
-  const flag = getFlagFromJid(jid)
+    const num = jid.split('@')[0]
+    const flag = getFlagFromJid(jid)
 
-  lines.push(`┊» ${flag} @${num}`)
-  mentions.push(jid)
-}
+    lines.push(`┊» ${flag} @${num}`)
+    mentions.push(jid)
+  }
 
   if (!mentions.length) return
 
