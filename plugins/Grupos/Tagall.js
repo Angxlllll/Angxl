@@ -95,7 +95,7 @@ ${lines.join('\n')}`
 
 handler.help = ['todos']
 handler.tags = ['grupos']
-handler.customPrefix = /^.?(todos|invocar|invocacion|invocación)$/i
+handler.command = ["todos"];
 handler.group = true
 handler.admin = true
 
