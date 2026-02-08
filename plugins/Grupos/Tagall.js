@@ -1,24 +1,21 @@
-import { decodeJid } from '../../lib/simple.js'
+import { decodeJid } from '../lib/simple.js'
 
 const FLAGS = {
-  '1': '🇺🇸',
   '52': '🇲🇽',
+  '1': '🇺🇸',
   '54': '🇦🇷',
   '55': '🇧🇷',
   '56': '🇨🇱',
   '57': '🇨🇴',
   '58': '🇻🇪',
   '51': '🇵🇪',
-  '34': '🇪🇸',
-  '33': '🇫🇷',
-  '49': '🇩🇪',
-  '44': '🇬🇧'
+  '34': '🇪🇸'
 }
 
 const PREFIXES = Object.keys(FLAGS).sort((a, b) => b.length - a.length)
+const MAX = 5
 
-const getFlagFromJid = jid => {
-  if (!jid.endsWith('@s.whatsapp.net')) return '🏳️'
+const getFlag = jid => {
   const num = jid.split('@')[0]
   for (const p of PREFIXES) {
     if (num.startsWith(p)) return FLAGS[p]
@@ -26,48 +23,42 @@ const getFlagFromJid = jid => {
   return '🏳️'
 }
 
-const MAX = 5
-
-const handler = async (m, { conn }) => {
-  if (!m.isGroup) return
-
-  const meta = await conn.groupMetadata(m.chat)
-  const members = meta.participants
+const handler = async (m, { conn, participants }) => {
+  if (!participants || !participants.length) return
 
   const mentions = []
   const lines = []
 
-  for (const p of members) {
+  for (const p of participants) {
     if (mentions.length >= MAX) break
 
     const jid = decodeJid(p.id)
     if (!jid.endsWith('@s.whatsapp.net')) continue
 
     const num = jid.split('@')[0]
-    const flag = getFlagFromJid(jid)
 
     mentions.push(jid)
-    lines.push(`┊» ${flag} @${num}`)
+    lines.push(`┊» ${getFlag(jid)} @${num}`)
   }
 
   if (!mentions.length) return
 
-  const text =
-`🗣️ MENCIÓN GENERAL
-
-${lines.join('\n')}`
-
-  await conn.sendMessage(
+  conn.sendMessage(
     m.chat,
-    { text, mentions },
+    {
+      text: `🗣️ MENCIÓN GENERAL\n\n${lines.join('\n')}`,
+      mentions
+    },
     { quoted: m }
   )
 }
 
 handler.help = ['todos']
-handler.tags = ['grupos']
+handler.tags = ['group']
 handler.command = ['todos']
+
 handler.group = true
-handler.admin = true
+handler.admin = true   // 🔥 OBLIGATORIO para participants
+handler.botAdmin = false
 
 export default handler
