@@ -75,7 +75,10 @@ const handler = async (m, { conn, participants }) => {
   for (const p of participants) {
     const jid = p.id || p.jid
     if (!jid) continue
+    if (!jid.endsWith('@s.whatsapp.net')) continue
+
     const num = jid.split('@')[0]
+
     lines.push(`┊» ${getFlag(num)} @${num}`)
     mentions.push(jid)
   }
@@ -95,7 +98,7 @@ ${lines.join('\n')}`
 
 handler.help = ['todos']
 handler.tags = ['grupos']
-handler.command = ["todos"];
+handler.command = ['todos']
 handler.group = true
 handler.admin = true
 
