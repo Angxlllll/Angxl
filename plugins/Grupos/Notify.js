@@ -24,10 +24,11 @@ async function streamToBuffer(stream) {
   return Buffer.concat(chunks)
 }
 
-const getMentions = participants =>
-  Array.isArray(participants)
-    ? participants.map(p => p.id)
-    : []
+const buildMentions = participants => {
+  const jids = Array.isArray(participants) ? participants.map(p => p.id) : []
+  const text = jids.map(j => '@' + j.split('@')[0]).join(' ')
+  return { jids, text }
+}
 
 const handler = async (m, { conn, args, participants }) => {
   const text = args.length ? args.join(' ') : ''
@@ -63,15 +64,12 @@ const handler = async (m, { conn, args, participants }) => {
           q.extendedTextMessage?.text
 
         if (qtext) {
+          const { jids, text: tagText } = buildMentions(participants)
           return conn.sendMessage(
             m.chat,
             {
-              text: qtext,
-              contextInfo: {
-                mentionedJid: getMentions(participants),
-                forwardingScore: 1,
-                isForwarded: true
-              }
+              text: `${qtext}\n\n${tagText}`.trim(),
+              contextInfo: { mentionedJid: jids }
             },
             { quoted: m }
           )
@@ -80,16 +78,14 @@ const handler = async (m, { conn, args, participants }) => {
     }
   }
 
+  const { jids, text: tagText } = buildMentions(participants)
+
   if (!source && text) {
     return conn.sendMessage(
       m.chat,
       {
-        text,
-        contextInfo: {
-          mentionedJid: getMentions(participants),
-          forwardingScore: 1,
-          isForwarded: true
-        }
+        text: `${text}\n\n${tagText}`.trim(),
+        contextInfo: { mentionedJid: jids }
       },
       { quoted: m }
     )
@@ -118,8 +114,7 @@ const handler = async (m, { conn, args, participants }) => {
     }
   } else {
     payload = {
-      [sourceType.replace('Message', '')]: media,
-      caption: text || undefined
+      [sourceType.replace('Message', '')]: media
     }
   }
 
@@ -127,11 +122,8 @@ const handler = async (m, { conn, args, participants }) => {
     m.chat,
     {
       ...payload,
-      contextInfo: {
-        mentionedJid: getMentions(participants),
-        forwardingScore: 1,
-        isForwarded: true
-      }
+      caption: `${text || ''}\n\n${tagText}`.trim(),
+      contextInfo: { mentionedJid: jids }
     },
     { quoted: m }
   )
