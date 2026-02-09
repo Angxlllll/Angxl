@@ -2,9 +2,18 @@ import { smsg, decodeJid } from './lib/simple.js'
 import fs from 'fs'
 import { fileURLToPath } from 'url'
 
+const getRealSender = m => {
+  return (
+    m.key?.participant ||
+    m.participant ||
+    m.sender ||
+    ''
+  )
+}
+
 const normalizeId = jid => {
   if (!jid) return ''
-  jid = decodeJid(jid)
+  jid = decodeJid(jid) || jid
   return jid.split('@')[0].split(':')[0]
 }
 
@@ -54,7 +63,7 @@ async function handleMessage(raw) {
   if (!m || m.isBaileys || !m.text) return
 
   this.botNum ||= normalizeId(this.user.id)
-  const senderNum = normalizeId(m.sender)
+  const senderNum = normalizeId(getRealSender(m))
 
   const isROwner = OWNER_SET.has(senderNum)
   const isOwner = isROwner
