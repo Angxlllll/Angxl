@@ -8,7 +8,7 @@ const OWNER = new Set(
 
 const FAIL = {
   rowner: '𝖤𝗌𝗍𝖾 𝖢𝗈𝗆𝖺𝗇𝖽𝗈 𝖲𝗈𝗅𝗈 𝖯𝗎𝖾𝖽𝖾 𝖲𝖾𝗋 𝖴𝗌𝗈 𝖱𝖾𝗌𝗍𝗋𝗂𝗇𝗀𝗂𝖽𝗈',
-  owner: '𝖤𝗌𝗍𝖾 𝖢𝗈𝗆𝖺𝗇𝖽𝗈 𝖲𝗈𝗅𝗈 𝖯𝗎𝖾𝖽𝖾 𝖲𝖾𝗋 𝖴𝗍𝗂𝗅𝗂𝗓𝖺𝖽𝗈 𝖯𝗈𝗋 𝖬𝗂 𝖢𝗋𝖾𝖺𝖽𝗈𝗋',
+  owner: '𝖤𝗌𝗍𝖾 𝖢𝗈𝗆𝖺𝗇𝖽𝗈 𝖲𝗈𝗅𝗈 𝖯𝗎𝖾𝖽𝖾 𝖲𝖾𝗋 𝖴𝗍𝗂𝗅𝗂𝗓𝖺𝖽𝗈 𝖯𝗈𝗋 𝖬𝗂 𝖢𝗋𝖾𝖺𝖽𝗈𝗤',
   admin: '𝖤𝗌𝗍𝖾 𝖢𝗈𝗆𝖺𝗇𝖽𝗈 𝖲𝗈𝗅𝗈 𝖯𝗎𝖾𝖽𝖾 𝖲𝖾𝗋 𝖴𝗌𝗈 𝖣𝖾 𝖠𝖽𝗆𝗂𝗇',
   botAdmin: '𝖭𝖾𝖼𝖾𝗌𝗂𝗍𝗈 𝖲𝖾𝗋 𝖠𝖽𝗆𝗂𝗇'
 }
@@ -17,20 +17,19 @@ global.dfail = (t, m, c) =>
   FAIL[t] && c.sendMessage(m.chat, { text: FAIL[t] }, { quoted: m })
 
 global.groupAdmins ||= new Map()
+const ADMIN_TTL = 20000
 
 export function bindGroupEvents(conn) {
   conn.ev.on('group-participants.update', e => {
-    let cached = global.groupAdmins.get(e.id)
-    if (!cached) {
-      cached = { admins: new Set() }
-      global.groupAdmins.set(e.id, cached)
-    }
+    const cached = global.groupAdmins.get(e.id)
+    if (!cached) return
     for (const jid of e.participants) {
       const j = decodeJid(jid)
       e.action === 'promote'
         ? cached.admins.add(j)
         : cached.admins.delete(j)
     }
+    cached.t = Date.now()
   })
 }
 
@@ -38,7 +37,7 @@ export function handler(update) {
   const msgs = update?.messages
   if (!msgs) return
   for (const raw of msgs) {
-    setImmediate(() => handle.call(this, raw))
+    Promise.resolve().then(() => handle.call(this, raw))
   }
 }
 
@@ -97,21 +96,21 @@ async function handle(raw) {
 
   if (m.isGroup && (plugin.admin || plugin.botAdmin)) {
     let cached = global.groupAdmins.get(m.chat)
+    let admins
 
-    if (!cached) {
-      this.groupMetadata(m.chat)
-        .then(meta => {
-          const admins = new Set(
-            meta.participants.filter(p => p.admin).map(p => decodeJid(p.id))
-          )
-          global.groupAdmins.set(m.chat, { admins })
-        })
-        .catch(() => {})
+    if (!cached || Date.now() - cached.t > ADMIN_TTL) {
+      groupMetadata = await this.groupMetadata(m.chat)
+      participants = groupMetadata.participants
+      admins = new Set(
+        participants.filter(p => p.admin).map(p => decodeJid(p.id))
+      )
+      global.groupAdmins.set(m.chat, { admins, t: Date.now() })
+    } else {
+      admins = cached.admins
     }
 
-    const admins = cached?.admins
-    isAdmin = isOwner || admins?.has(sender)
-    isBotAdmin = isOwner || admins?.has(botJid)
+    isAdmin = isOwner || admins.has(sender)
+    isBotAdmin = isOwner || admins.has(botJid)
 
     if (plugin.admin && !isAdmin)
       return global.dfail('admin', m, this)
@@ -123,17 +122,19 @@ async function handle(raw) {
   const exec = plugin.exec || plugin.default || plugin
   if (!exec) return
 
-  exec.call(this, m, {
-    conn: this,
-    args,
-    command,
-    usedPrefix: c === 46 || c === 33 ? text[0] : '',
-    participants,
-    groupMetadata,
-    isROwner,
-    isOwner,
-    isAdmin,
-    isBotAdmin,
-    chat: m.chat
-  })
+  Promise.resolve().then(() =>
+    exec.call(this, m, {
+      conn: this,
+      args,
+      command,
+      usedPrefix: c === 46 || c === 33 ? text[0] : '',
+      participants,
+      groupMetadata,
+      isROwner,
+      isOwner,
+      isAdmin,
+      isBotAdmin,
+      chat: m.chat
+    })
+  )
 }
