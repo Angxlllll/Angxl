@@ -1,8 +1,10 @@
-import {
+import * as baileys from '@whiskeysockets/baileys'
+
+const {
   generateWAMessageContent,
   generateWAMessageFromContent,
   proto
-} from "@whiskeysockets/baileys"
+} = baileys
 
 const handler = async (m, { conn }) => {
   const chat = m.chat
