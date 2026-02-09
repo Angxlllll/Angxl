@@ -17,19 +17,20 @@ global.dfail = (t, m, c) =>
   FAIL[t] && c.sendMessage(m.chat, { text: FAIL[t] }, { quoted: m })
 
 global.groupAdmins ||= new Map()
-const ADMIN_TTL = 20000
 
 export function bindGroupEvents(conn) {
   conn.ev.on('group-participants.update', e => {
-    const cached = global.groupAdmins.get(e.id)
-    if (!cached) return
+    let cached = global.groupAdmins.get(e.id)
+    if (!cached) {
+      cached = { admins: new Set() }
+      global.groupAdmins.set(e.id, cached)
+    }
     for (const jid of e.participants) {
       const j = decodeJid(jid)
       e.action === 'promote'
         ? cached.admins.add(j)
         : cached.admins.delete(j)
     }
-    cached.t = Date.now()
   })
 }
 
@@ -96,21 +97,21 @@ async function handle(raw) {
 
   if (m.isGroup && (plugin.admin || plugin.botAdmin)) {
     let cached = global.groupAdmins.get(m.chat)
-    let admins
 
-    if (!cached || Date.now() - cached.t > ADMIN_TTL) {
-      groupMetadata = await this.groupMetadata(m.chat)
-      participants = groupMetadata.participants
-      admins = new Set(
-        participants.filter(p => p.admin).map(p => decodeJid(p.id))
-      )
-      global.groupAdmins.set(m.chat, { admins, t: Date.now() })
-    } else {
-      admins = cached.admins
+    if (!cached) {
+      this.groupMetadata(m.chat)
+        .then(meta => {
+          const admins = new Set(
+            meta.participants.filter(p => p.admin).map(p => decodeJid(p.id))
+          )
+          global.groupAdmins.set(m.chat, { admins })
+        })
+        .catch(() => {})
     }
 
-    isAdmin = isOwner || admins.has(sender)
-    isBotAdmin = isOwner || admins.has(botJid)
+    const admins = cached?.admins
+    isAdmin = isOwner || admins?.has(sender)
+    isBotAdmin = isOwner || admins?.has(botJid)
 
     if (plugin.admin && !isAdmin)
       return global.dfail('admin', m, this)
