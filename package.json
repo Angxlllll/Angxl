@@ -11,7 +11,7 @@
   "dependencies": {
     "axios": "^1.7.7",
 "@whiskeysockets/baileys":
-"github:this-xyz/bails",
+"github:gatanina-li/baileys",
     "chalk": "^5.3.0",
     "acrcloud": "^1.4.0",
     "node-cache": "^5.1.2",
