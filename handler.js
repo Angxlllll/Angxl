@@ -29,7 +29,6 @@ global.dfail = (type, m, conn) => {
 Object.freeze(global.dfail)
 
 global.groupAdmins ||= new Map()
-global.chatQueues ||= new Map()
 
 export function bindGroupEvents(conn) {
   conn.ev.on('group-participants.update', ({ id, participants, action }) => {
@@ -48,27 +47,6 @@ export function handler(chatUpdate) {
   for (const raw of messages) handleMessage.call(this, raw)
 }
 
-function enqueue(chat, fn) {
-  let q = global.chatQueues.get(chat)
-  if (!q) {
-    q = []
-    global.chatQueues.set(chat, q)
-  }
-  q.push(fn)
-  if (q.length === 1) runQueue(chat)
-}
-
-async function runQueue(chat) {
-  const q = global.chatQueues.get(chat)
-  if (!q) return
-  while (q.length) {
-    try {
-      await q[0]()
-    } catch {}
-    q.shift()
-  }
-}
-
 function handleMessage(raw) {
   const m = smsg(this, raw)
   if (!m || m.isBaileys || !m.text) return
@@ -77,7 +55,7 @@ function handleMessage(raw) {
   const senderNum = normalizeId(m.sender)
 
   const isROwner = OWNER_SET.has(senderNum)
-  const isOwner = isROwner || m.fromMe
+  const isOwner = isROwner
 
   const text = m.text.trim()
   const c = text.charCodeAt(0)
@@ -120,45 +98,46 @@ function handleMessage(raw) {
   if (plugin.rowner && !isROwner) return global.dfail('rowner', m, this)
   if (plugin.owner && !isOwner) return global.dfail('owner', m, this)
 
-  enqueue(m.chat, async () => {
-    let isAdmin = false
-    let isBotAdmin = false
-    let participants
-    let groupMetadata
+  let isAdmin = false
+  let isBotAdmin = false
+  let participants
+  let groupMetadata
 
-    if (m.isGroup && (plugin.admin || plugin.botAdmin)) {
-      let admins = global.groupAdmins.get(m.chat)
-      if (!admins) {
-        groupMetadata = await this.groupMetadata(m.chat)
-        admins = new Set()
-        for (const p of groupMetadata.participants) {
-          if (p.admin) admins.add(normalizeId(p.id))
-        }
-        global.groupAdmins.set(m.chat, admins)
-        participants = groupMetadata.participants
+  if (m.isGroup && (plugin.admin || plugin.botAdmin)) {
+    let admins = global.groupAdmins.get(m.chat)
+
+    if (!admins) {
+      groupMetadata = await this.groupMetadata(m.chat)
+      admins = new Set()
+      for (const p of groupMetadata.participants) {
+        if (p.admin) admins.add(normalizeId(p.id))
       }
-      isAdmin = admins.has(senderNum)
-      isBotAdmin = admins.has(this.botNum)
-      if (plugin.admin && !isAdmin) return global.dfail('admin', m, this)
-      if (plugin.botAdmin && !isBotAdmin) return global.dfail('botAdmin', m, this)
+      global.groupAdmins.set(m.chat, admins)
+      participants = groupMetadata.participants
     }
 
-    const exec = plugin.exec || plugin.default || plugin
-    if (!exec) return
+    isAdmin = isOwner || admins.has(senderNum)
+    isBotAdmin = isOwner || admins.has(this.botNum)
 
-    await exec.call(this, m, {
-      conn: this,
-      args,
-      command,
-      usedPrefix,
-      participants,
-      groupMetadata,
-      isROwner,
-      isOwner,
-      isAdmin,
-      isBotAdmin,
-      chat: m.chat
-    })
+    if (plugin.admin && !isAdmin) return global.dfail('admin', m, this)
+    if (plugin.botAdmin && !isBotAdmin) return global.dfail('botAdmin', m, this)
+  }
+
+  const exec = plugin.exec || plugin.default || plugin
+  if (!exec) return
+
+  exec.call(this, m, {
+    conn: this,
+    args,
+    command,
+    usedPrefix,
+    participants,
+    groupMetadata,
+    isROwner,
+    isOwner,
+    isAdmin,
+    isBotAdmin,
+    chat: m.chat
   })
 }
 
