@@ -1,113 +1,89 @@
 import { smsg, decodeJid } from './lib/simple.js'
-import fs from 'fs'
-import { fileURLToPath } from 'url'
 
-const getRealSender = m => {
-  return (
-    m.key?.participant ||
-    m.participant ||
-    m.sender ||
-    ''
-  )
-}
-
-const normalizeId = jid => {
-  if (!jid) return ''
-  jid = decodeJid(jid) || jid
-  return jid.split('@')[0].split(':')[0]
-}
-
-const OWNER_SET = new Set(
-  (global.owner || []).map(v =>
-    normalizeId(Array.isArray(v) ? v[0] : v)
+const OWNER = new Set(
+  (global.owner || []).map(o =>
+    decodeJid(Array.isArray(o) ? o[0] : o)
   )
 )
 
-const DFAIL_MSG = {
+const FAIL = {
   rowner: '𝖤𝗌𝗍𝖾 𝖢𝗈𝗆𝖺𝗇𝖽𝗈 𝖲𝗈𝗅𝗈 𝖯𝗎𝖾𝖽𝖾 𝖲𝖾𝗋 𝖴𝗌𝗈 𝖱𝖾𝗌𝗍𝗋𝗂𝗇𝗀𝗂𝖽𝗈',
   owner: '𝖤𝗌𝗍𝖾 𝖢𝗈𝗆𝖺𝗇𝖽𝗈 𝖲𝗈𝗅𝗈 𝖯𝗎𝖾𝖽𝖾 𝖲𝖾𝗋 𝖴𝗍𝗂𝗅𝗂𝗓𝖺𝖽𝗈 𝖯𝗈𝗋 𝖬𝗂 𝖢𝗋𝖾𝖺𝖽𝗈𝗋',
   admin: '𝖤𝗌𝗍𝖾 𝖢𝗈𝗆𝖺𝗇𝖽𝗈 𝖲𝗈𝗅𝗈 𝖯𝗎𝖾𝖽𝖾 𝖲𝖾𝗋 𝖴𝗌𝗈 𝖣𝖾 𝖠𝖽𝗆𝗂𝗇',
   botAdmin: '𝖭𝖾𝖼𝖾𝗌𝗂𝗍𝗈 𝖲𝖾𝗋 𝖠𝖽𝗆𝗂𝗇'
 }
 
-global.dfail = (type, m, conn) => {
-  const msg = DFAIL_MSG[type]
-  if (msg) conn.sendMessage(m.chat, { text: msg }, { quoted: m })
-}
-
-Object.freeze(global.dfail)
+global.dfail = (t, m, c) =>
+  FAIL[t] && c.sendMessage(m.chat, { text: FAIL[t] }, { quoted: m })
 
 global.groupAdmins ||= new Map()
 
 export function bindGroupEvents(conn) {
-  conn.ev.on('group-participants.update', ({ id, participants, action }) => {
-    const admins = global.groupAdmins.get(id)
+  conn.ev.on('group-participants.update', e => {
+    const admins = global.groupAdmins.get(e.id)
     if (!admins) return
-    for (const p of participants) {
-      const n = normalizeId(p)
-      action === 'promote' ? admins.add(n) : admins.delete(n)
+    for (const jid of e.participants) {
+      const j = decodeJid(jid)
+      e.action === 'promote' ? admins.add(j) : admins.delete(j)
     }
   })
 }
 
-export function handler(chatUpdate) {
-  const messages = chatUpdate?.messages
-  if (!messages) return
-  for (const raw of messages) {
-    handleMessage.call(this, raw)
+export function handler(update) {
+  const msgs = update?.messages
+  if (!msgs) return
+  for (const raw of msgs) {
+    setImmediate(() => handle.call(this, raw))
   }
 }
 
-async function handleMessage(raw) {
+async function handle(raw) {
   const m = smsg(this, raw)
   if (!m || m.isBaileys || !m.text) return
 
-  this.botNum ||= normalizeId(this.user.id)
-  const senderNum = normalizeId(getRealSender(m))
+  const text = m.text
+  const c = text.charCodeAt(0)
 
-  const isROwner = OWNER_SET.has(senderNum)
+  if (!global.sinprefix && c !== 46 && c !== 33) return
+
+  const body = c === 46 || c === 33 ? text.slice(1) : text
+  const space = body.indexOf(' ')
+  const command = (space === -1 ? body : body.slice(0, space)).toLowerCase()
+  if (!command) return
+
+  const args =
+    space === -1
+      ? []
+      : body.slice(space + 1).trim().split(/\s+/)
+
+  const sender = m.sender
+  const botJid = decodeJid(this.user.id)
+
+  const isROwner = OWNER.has(sender)
   const isOwner = isROwner
 
-  const text = m.text.trim()
-  const c = text.charCodeAt(0)
-  const hasPrefix = c === 46 || c === 33
-
-  if (!hasPrefix && !global.sinprefix) return
-  const map = global.COMMAND_MAP
-  if (!map) return
-
-  const usedPrefix = hasPrefix ? text[0] : ''
-  const body = hasPrefix ? text.slice(1).trim() : text
-
-  let command, args
-  const i = body.indexOf(' ')
-  if (i === -1) {
-    command = body
-    args = []
-  } else {
-    command = body.slice(0, i)
-    args = body.slice(i + 1).trim().split(/\s+/)
-  }
-
-  command = command.toLowerCase()
-
-  if (command === 'on' && args[0] === 'sinprefix') {
+  if ((command === 'on' || command === 'off') && args[0] === 'sinprefix') {
     if (!isOwner) return global.dfail('owner', m, this)
-    global.sinprefix = true
-    return this.sendMessage(m.chat, { text: 'sinprefix activado' }, { quoted: m })
+    const enable = command === 'on'
+    if (global.sinprefix !== enable) {
+      global.sinprefix = enable
+      return this.sendMessage(
+        m.chat,
+        { text: `sinprefix ${enable ? 'activado' : 'desactivado'}` },
+        { quoted: m }
+      )
+    }
+    return
   }
 
-  if (command === 'off' && args[0] === 'sinprefix') {
-    if (!isOwner) return global.dfail('owner', m, this)
-    global.sinprefix = false
-    return this.sendMessage(m.chat, { text: 'sinprefix desactivado' }, { quoted: m })
-  }
-
-  const plugin = map.get(command)
+  const plugin = global.COMMAND_MAP?.get(command)
   if (!plugin || plugin.disabled) return
 
-  if (plugin.rowner && !isROwner) return global.dfail('rowner', m, this)
-  if (plugin.owner && !isOwner) return global.dfail('owner', m, this)
+  if (plugin.rowner && !isROwner)
+    return global.dfail('rowner', m, this)
+
+  if (plugin.owner && !isOwner)
+    return global.dfail('owner', m, this)
 
   let isAdmin = false
   let isBotAdmin = false
@@ -116,22 +92,20 @@ async function handleMessage(raw) {
 
   if (m.isGroup && (plugin.admin || plugin.botAdmin)) {
     let admins = global.groupAdmins.get(m.chat)
-
     if (!admins) {
       groupMetadata = await this.groupMetadata(m.chat)
-      admins = new Set()
-      for (const p of groupMetadata.participants) {
-        if (p.admin) admins.add(normalizeId(p.id))
-      }
-      global.groupAdmins.set(m.chat, admins)
       participants = groupMetadata.participants
+      admins = new Set(
+        participants.filter(p => p.admin).map(p => decodeJid(p.id))
+      )
+      global.groupAdmins.set(m.chat, admins)
     }
-
-    isAdmin = isOwner || admins.has(senderNum)
-    isBotAdmin = isOwner || admins.has(this.botNum)
-
-    if (plugin.admin && !isAdmin) return global.dfail('admin', m, this)
-    if (plugin.botAdmin && !isBotAdmin) return global.dfail('botAdmin', m, this)
+    isAdmin = isOwner || admins.has(sender)
+    isBotAdmin = isOwner || admins.has(botJid)
+    if (plugin.admin && !isAdmin)
+      return global.dfail('admin', m, this)
+    if (plugin.botAdmin && !isBotAdmin)
+      return global.dfail('botAdmin', m, this)
   }
 
   const exec = plugin.exec || plugin.default || plugin
@@ -141,7 +115,7 @@ async function handleMessage(raw) {
     conn: this,
     args,
     command,
-    usedPrefix,
+    usedPrefix: c === 46 || c === 33 ? text[0] : '',
     participants,
     groupMetadata,
     isROwner,
@@ -149,13 +123,5 @@ async function handleMessage(raw) {
     isAdmin,
     isBotAdmin,
     chat: m.chat
-  })
-}
-
-if (process.env.NODE_ENV === 'development') {
-  const file = fileURLToPath(import.meta.url)
-  fs.watchFile(file, () => {
-    fs.unwatchFile(file)
-    console.log('handler actualizado')
   })
 }
