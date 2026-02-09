@@ -1,10 +1,8 @@
-import * as baileys from '@whiskeysockets/baileys'
-
-const {
+import {
   generateWAMessageContent,
   generateWAMessageFromContent,
   proto
-} = baileys
+} from "@whiskeysockets/baileys"
 
 const handler = async (m, { conn }) => {
   const chat = m.chat
@@ -102,6 +100,8 @@ const handler = async (m, { conn }) => {
 
 handler.help = ["link"]
 handler.tags = ["grupos"]
-handler.command = ['link']
+handler.customPrefix = /^\.?(link)$/i
+handler.command = new RegExp()
 handler.group = true
+
 export default handler
