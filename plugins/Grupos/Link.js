@@ -28,12 +28,12 @@ const handler = async (m, { conn }) => {
     const meta = await conn.groupMetadata(chat)
     const groupName = meta.subject || "Grupo"
 
-    let inviteCode = null
+    let inviteCode
     try {
       inviteCode = await conn.groupInviteCode(chat)
-    } catch {}
-
-    if (!inviteCode) return
+    } catch {
+      return
+    }
 
     const link = `https://chat.whatsapp.com/${inviteCode}`
 
@@ -67,29 +67,25 @@ const handler = async (m, { conn }) => {
     const interactive = generateWAMessageFromContent(
       chat,
       {
-        viewOnceMessage: {
-          message: {
-            messageContextInfo: {
-              deviceListMetadata: {},
-              deviceListMetadataVersion: 2
-            },
-            interactiveMessage: proto.Message.InteractiveMessage.fromObject({
-              header: proto.Message.InteractiveMessage.Header.fromObject({
-                title: `_*${groupName}*_`,
-                hasMediaAttachment: true,
-                imageMessage
-              }),
-              body: proto.Message.InteractiveMessage.Body.create({
-                text: `${link}`
-              }),
-              nativeFlowMessage:
-                proto.Message.InteractiveMessage.NativeFlowMessage.fromObject({
-                  buttons,
-                  messageParamsJson: ""
-                })
+        messageContextInfo: {
+          deviceListMetadata: {},
+          deviceListMetadataVersion: 2
+        },
+        interactiveMessage: proto.Message.InteractiveMessage.fromObject({
+          header: proto.Message.InteractiveMessage.Header.fromObject({
+            title: `_*${groupName}*_`,
+            hasMediaAttachment: true,
+            imageMessage
+          }),
+          body: proto.Message.InteractiveMessage.Body.create({
+            text: link
+          }),
+          nativeFlowMessage:
+            proto.Message.InteractiveMessage.NativeFlowMessage.fromObject({
+              buttons,
+              messageParamsJson: "{}"
             })
-          }
-        }
+        })
       },
       { quoted: m }
     )
@@ -102,9 +98,8 @@ const handler = async (m, { conn }) => {
   }
 }
 
-handler.help = ["𝖫𝗂𝗇𝗄"]
-handler.tags = ["𝖦𝖱𝖴𝖯𝖮𝖲"]
+handler.help = ["link"]
+handler.tags = ["grupos"]
 handler.command = ['link']
 handler.group = true
-
 export default handler
