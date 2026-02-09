@@ -34,6 +34,6 @@ const handler = async (m, { conn }) => {
 
 handler.help = ["hola"]
 handler.tags = ["main"]
-handler.command = ['todos']
+handler.command = ['hola']
 
 export default handler
