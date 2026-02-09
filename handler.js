@@ -24,12 +24,9 @@ Object.freeze(global.dfail)
 
 global.groupAdmins ||= new Map()
 
-const GROUP_CACHE = new Map()
-const GROUP_TTL = 30000
-
 export function bindGroupEvents(conn) {
   conn.ev.on('group-participants.update', ({ id, participants, action }) => {
-    const admins = global.groupAdmins.get(id)
+    let admins = global.groupAdmins.get(id)
     if (!admins) return
     for (const p of participants) {
       const n = DIGITS(decodeJid(p))
@@ -101,24 +98,17 @@ async function handleMessage(raw) {
   let groupMetadata
 
   if (m.isGroup && (plugin.admin || plugin.botAdmin)) {
-    let cached = GROUP_CACHE.get(m.chat)
-    if (!cached || Date.now() - cached.time > GROUP_TTL) {
-      groupMetadata = await this.groupMetadata(m.chat)
-      cached = { data: groupMetadata, time: Date.now() }
-      GROUP_CACHE.set(m.chat, cached)
-    } else {
-      groupMetadata = cached.data
-    }
-
-    participants = groupMetadata.participants
-
     let admins = global.groupAdmins.get(m.chat)
+
     if (!admins) {
-      admins = new Set()
-      for (const p of participants) {
-        if (p.admin) admins.add(DIGITS(decodeJid(p.id)))
-      }
+      groupMetadata = await this.groupMetadata(m.chat)
+      admins = new Set(
+        groupMetadata.participants
+          .filter(p => p.admin)
+          .map(p => DIGITS(decodeJid(p.id)))
+      )
       global.groupAdmins.set(m.chat, admins)
+      participants = groupMetadata.participants
     }
 
     isAdmin = admins.has(senderNum)
