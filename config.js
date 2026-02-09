@@ -7,7 +7,7 @@ global.opts = yargs(process.argv.slice(2))
   .parse()
 
 const OWNER = Object.freeze([
-  '5215911153853',
+  '525911153853',
   '159606034665538',
   '3264846290995',
   '205819731832938'
