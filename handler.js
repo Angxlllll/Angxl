@@ -44,10 +44,12 @@ export function bindGroupEvents(conn) {
 export function handler(chatUpdate) {
   const messages = chatUpdate?.messages
   if (!messages) return
-  for (const raw of messages) handleMessage.call(this, raw)
+  for (const raw of messages) {
+    handleMessage.call(this, raw)
+  }
 }
 
-function handleMessage(raw) {
+async function handleMessage(raw) {
   const m = smsg(this, raw)
   if (!m || m.isBaileys || !m.text) return
 
