@@ -135,11 +135,13 @@ async function handleMessage(raw) {
     chat: m.chat
   }
 
-  try {
-    await exec.call(this, m, ctx)
-  } catch (e) {
-    console.error('Error en exec:', e)
-  }
+  setImmediate(() => {
+  Promise.resolve(
+    exec.call(this, m, ctx)
+  ).catch(err => {
+    console.error('Plugin error:', err)
+  })
+})
 }
 
 if (process.env.NODE_ENV === 'development') {
