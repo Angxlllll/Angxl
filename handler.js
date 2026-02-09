@@ -2,17 +2,23 @@ import { smsg, decodeJid } from './lib/simple.js'
 import fs from 'fs'
 import { fileURLToPath } from 'url'
 
-const DIGITS = s => String(s || '').replace(/\D/g, '')
+const normalizeId = jid => {
+  if (!jid) return ''
+  jid = decodeJid(jid)
+  return jid.split('@')[0].split(':')[0]
+}
 
 const OWNER_SET = new Set(
-  (global.owner || []).map(v => DIGITS(Array.isArray(v) ? v[0] : v))
+  (global.owner || []).map(v =>
+    normalizeId(Array.isArray(v) ? v[0] : v)
+  )
 )
 
 const DFAIL_MSG = {
-  rowner: '𝖤𝗌𝗍𝖾 𝖢𝗈𝗆𝖺𝗇𝖽𝗈 𝖲𝗈𝗅𝗈 𝖯𝗎𝖾𝖽𝖾 𝖲𝖾𝗋 𝖴𝗌𝗋𝗋𝗋 𝗎𝗌𝗂𝗌𝗍𝗋𝗋𝗂𝗍𝗋𝗋𝗋𝗈',
+  rowner: '𝖤𝗌𝗍𝖾 𝖢𝗈𝗆𝖺𝗇𝖽𝗈 𝖲𝗈𝗅𝗈 𝖯𝗎𝖾𝖽𝖾 𝖲𝖾𝗋 𝖴𝗌𝗈 𝖱𝖾𝗌𝗍𝗋𝗂𝗇𝗀𝗂𝖽𝗈',
   owner: '𝖤𝗌𝗍𝖾 𝖢𝗈𝗆𝖺𝗇𝖽𝗈 𝖲𝗈𝗅𝗈 𝖯𝗎𝖾𝖽𝖾 𝖲𝖾𝗋 𝖴𝗍𝗂𝗅𝗂𝗓𝖺𝖽𝗈 𝖯𝗈𝗋 𝖬𝗂 𝖢𝗋𝖾𝖺𝖽𝗈𝗋',
-  admin: '𝖤𝗌𝗍𝖾 𝖢𝗈𝗆𝖺𝗇𝖽𝗈 𝖲𝗈𝗅𝗈 𝖯𝗎𝖾𝖽𝖾 𝖲𝖾𝗋 𝖴𝗌𝗋𝗋𝗋 𝗎𝗌𝗂𝗌𝗍𝗋𝗋𝗂𝗍𝗋𝗋𝗋𝗈',
-  botAdmin: '𝖭𝖾𝖼𝗌𝗂𝗍𝗈 𝗌𝖾𝗋 𝖠𝖽𝗆𝗂𝗇'
+  admin: '𝖤𝗌𝗍𝖾 𝖢𝗈𝗆𝖺𝗇𝖽𝗈 𝖲𝗈𝗅𝗈 𝖯𝗎𝖾𝖽𝖾 𝖲𝖾𝗋 𝖴𝗌𝗈 𝖣𝖾 𝖠𝖽𝗆𝗂𝗇',
+  botAdmin: '𝖭𝖾𝖼𝖾𝗌𝗂𝗍𝗈 𝖲𝖾𝗋 𝖠𝖽𝗆𝗂𝗇'
 }
 
 global.dfail = (type, m, conn) => {
@@ -27,10 +33,10 @@ global.chatQueues ||= new Map()
 
 export function bindGroupEvents(conn) {
   conn.ev.on('group-participants.update', ({ id, participants, action }) => {
-    let admins = global.groupAdmins.get(id)
+    const admins = global.groupAdmins.get(id)
     if (!admins) return
     for (const p of participants) {
-      const n = DIGITS(decodeJid(p))
+      const n = normalizeId(p)
       action === 'promote' ? admins.add(n) : admins.delete(n)
     }
   })
@@ -39,42 +45,36 @@ export function bindGroupEvents(conn) {
 export function handler(chatUpdate) {
   const messages = chatUpdate?.messages
   if (!messages) return
-  for (const raw of messages) {
-    handleMessage.call(this, raw)
-  }
+  for (const raw of messages) handleMessage.call(this, raw)
 }
 
 function enqueue(chat, fn) {
   let q = global.chatQueues.get(chat)
   if (!q) {
-    q = { busy: false, tasks: [] }
+    q = []
     global.chatQueues.set(chat, q)
   }
-  q.tasks.push(fn)
-  if (!q.busy) runQueue(chat)
+  q.push(fn)
+  if (q.length === 1) runQueue(chat)
 }
 
 async function runQueue(chat) {
   const q = global.chatQueues.get(chat)
   if (!q) return
-  q.busy = true
-  while (q.tasks.length) {
-    const task = q.tasks.shift()
+  while (q.length) {
     try {
-      await task()
-    } catch (e) {
-      console.error('Error en cola:', e)
-    }
+      await q[0]()
+    } catch {}
+    q.shift()
   }
-  q.busy = false
 }
 
 function handleMessage(raw) {
   const m = smsg(this, raw)
   if (!m || m.isBaileys || !m.text) return
 
-  this.botNum ||= DIGITS(decodeJid(this.user.id))
-  const senderNum = DIGITS(decodeJid(m.sender))
+  this.botNum ||= normalizeId(this.user.id)
+  const senderNum = normalizeId(m.sender)
 
   const isROwner = OWNER_SET.has(senderNum)
   const isOwner = isROwner || m.fromMe
@@ -84,16 +84,18 @@ function handleMessage(raw) {
   const hasPrefix = c === 46 || c === 33
 
   if (!hasPrefix && !global.sinprefix) return
-  if (!global.COMMAND_MAP) return
+  const map = global.COMMAND_MAP
+  if (!map) return
 
   const usedPrefix = hasPrefix ? text[0] : ''
   const body = hasPrefix ? text.slice(1).trim() : text
 
-  let command = body
-  let args = []
-
+  let command, args
   const i = body.indexOf(' ')
-  if (i !== -1) {
+  if (i === -1) {
+    command = body
+    args = []
+  } else {
     command = body.slice(0, i)
     args = body.slice(i + 1).trim().split(/\s+/)
   }
@@ -112,7 +114,7 @@ function handleMessage(raw) {
     return this.sendMessage(m.chat, { text: 'sinprefix desactivado' }, { quoted: m })
   }
 
-  const plugin = global.COMMAND_MAP.get(command)
+  const plugin = map.get(command)
   if (!plugin || plugin.disabled) return
 
   if (plugin.rowner && !isROwner) return global.dfail('rowner', m, this)
@@ -126,21 +128,17 @@ function handleMessage(raw) {
 
     if (m.isGroup && (plugin.admin || plugin.botAdmin)) {
       let admins = global.groupAdmins.get(m.chat)
-
       if (!admins) {
         groupMetadata = await this.groupMetadata(m.chat)
-        admins = new Set(
-          groupMetadata.participants
-            .filter(p => p.admin)
-            .map(p => DIGITS(decodeJid(p.id)))
-        )
+        admins = new Set()
+        for (const p of groupMetadata.participants) {
+          if (p.admin) admins.add(normalizeId(p.id))
+        }
         global.groupAdmins.set(m.chat, admins)
         participants = groupMetadata.participants
       }
-
       isAdmin = admins.has(senderNum)
       isBotAdmin = admins.has(this.botNum)
-
       if (plugin.admin && !isAdmin) return global.dfail('admin', m, this)
       if (plugin.botAdmin && !isBotAdmin) return global.dfail('botAdmin', m, this)
     }
@@ -148,7 +146,7 @@ function handleMessage(raw) {
     const exec = plugin.exec || plugin.default || plugin
     if (!exec) return
 
-    const ctx = {
+    await exec.call(this, m, {
       conn: this,
       args,
       command,
@@ -160,9 +158,7 @@ function handleMessage(raw) {
       isAdmin,
       isBotAdmin,
       chat: m.chat
-    }
-
-    await exec.call(this, m, ctx)
+    })
   })
 }
 
@@ -170,6 +166,6 @@ if (process.env.NODE_ENV === 'development') {
   const file = fileURLToPath(import.meta.url)
   fs.watchFile(file, () => {
     fs.unwatchFile(file)
-    console.log('handler.js actualizado')
+    console.log('handler actualizado')
   })
 }
