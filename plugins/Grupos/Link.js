@@ -100,8 +100,7 @@ const handler = async (m, { conn }) => {
 
 handler.help = ["link"]
 handler.tags = ["grupos"]
-handler.customPrefix = /^\.?(link)$/i
-handler.command = new RegExp()
+handler.command = ['link']
 handler.group = true
 
 export default handler
