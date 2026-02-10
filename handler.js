@@ -46,7 +46,11 @@ export function handler(update) {
 
 async function handle(raw) {
   const m = smsg(this, raw)
-  if (!m || m.isBaileys || !m.text) return
+if (!m || m.isBaileys) return
+
+await all(m)
+
+if (!m.text) return
 
   all(m).catch(() => {})
 
