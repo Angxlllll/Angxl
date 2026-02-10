@@ -158,8 +158,7 @@ await conn.sendMessage(msg.chat, { text: `❌ Error: ${e.message}` }, { quoted: 
 })
 }
 
-handler.command = ["play2"]
-handler.help = ["play2 <texto>"]
-handler.tags = ["descargas"]
-
+handler.command = ['play2']
+handler.tags = ['descargas']
+handler.help = ['play']
 export default handler
