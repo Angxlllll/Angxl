@@ -17,7 +17,7 @@ const handler = async (m, { conn, args, usedPrefix, command }) => {
   await conn.sendMessage(m.chat, { react: { text: "🎬", key: m.key } })
 
   try {
-    const search = await yts(text)
+    const search = await yts(query)
     const video = search.videos?.[0]
     if (!video) throw new Error("Sin resultados")
 
