@@ -18,8 +18,15 @@ const FAIL = {
 global.dfail = (t, m, c) =>
   FAIL[t] && c.sendMessage(m.chat, { text: FAIL[t] }, { quoted: m })
 
-const ADMIN_CACHE = new Map()
-const ADMIN_TTL = 5 * 60 * 1000
+function getGroupAdmins(jid) {
+  const meta = global.groupMetadata.get(jid)
+  if (!meta) return null
+  return new Set(
+    meta.participants
+      .filter(p => p.admin)
+      .map(p => decodeJid(p.id))
+  )
+}
 
 export function handler(update) {
   const msgs = update?.messages
@@ -28,23 +35,24 @@ export function handler(update) {
   for (const raw of msgs) {
     if (!raw.message) continue
     if (raw.key?.remoteJid === 'status@broadcast') continue
-    handle.call(this, raw)
+    process.call(this, raw)
   }
 }
 
-async function handle(raw) {
+async function process(raw) {
   const m = smsg(this, raw)
   if (!m || m.isBaileys) return
 
   all(m)
 
-  if (!m.text) return
+  const text = m.text
+  if (!text) return
 
-  const c = m.text.charCodeAt(0)
+  const c = text.charCodeAt(0)
   const hasPrefix = c === 46 || c === 33
   if (!hasPrefix && !global.sinprefix) return
 
-  const body = hasPrefix ? m.text.slice(1) : m.text
+  const body = hasPrefix ? text.slice(1) : text
   if (!body) return
 
   const space = body.indexOf(' ')
@@ -69,21 +77,11 @@ async function handle(raw) {
   let isBotAdmin = false
 
   if (m.isGroup && (plugin.admin || plugin.botAdmin)) {
-    let cached = ADMIN_CACHE.get(m.chat)
+    const admins = getGroupAdmins(m.chat)
+    if (!admins) return
 
-    if (!cached || Date.now() - cached.t > ADMIN_TTL) {
-      const meta = await this.groupMetadata(m.chat)
-      const admins = new Set(
-        meta.participants
-          .filter(p => p.admin)
-          .map(p => decodeJid(p.id))
-      )
-      cached = { admins, t: Date.now() }
-      ADMIN_CACHE.set(m.chat, cached)
-    }
-
-    isAdmin = isOwner || cached.admins.has(sender)
-    isBotAdmin = isOwner || cached.admins.has(botJid)
+    isAdmin = isOwner || admins.has(sender)
+    isBotAdmin = isOwner || admins.has(botJid)
 
     if (plugin.admin && !isAdmin)
       return global.dfail('admin', m, this)
@@ -92,6 +90,12 @@ async function handle(raw) {
       return global.dfail('botAdmin', m, this)
   }
 
+  if (plugin.rowner && !isROwner)
+    return global.dfail('rowner', m, this)
+
+  if (plugin.owner && !isOwner)
+    return global.dfail('owner', m, this)
+
   const exec = plugin.exec || plugin.default || plugin
   if (!exec) return
 
@@ -99,7 +103,7 @@ async function handle(raw) {
     conn: this,
     args,
     command,
-    usedPrefix: hasPrefix ? m.text[0] : '',
+    usedPrefix: hasPrefix ? text[0] : '',
     isROwner,
     isOwner,
     isAdmin,
@@ -108,6 +112,6 @@ async function handle(raw) {
   }
 
   try {
-    await exec.call(this, m, ctx)
+    exec.call(this, m, ctx)
   } catch {}
 }
