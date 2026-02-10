@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "axios": "^1.7.7",
-"@whiskeysockets/baileys": "github:gatanina-li/baileys",
+"@whiskeysockets/baileys":"github:alba070503/baileys",
     "chalk": "^5.3.0",
     "acrcloud": "^1.4.0",
     "node-cache": "^5.1.2",
