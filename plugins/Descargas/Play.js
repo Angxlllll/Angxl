@@ -8,7 +8,6 @@ import fs from "fs"
 import path from "path"
 import { pipeline } from "stream"
 import { promisify } from "util"
-import { prepareWAMessageMedia, generateWAMessageFromContent, proto } from "@whiskeysockets/baileys"
 
 const streamPipe = promisify(pipeline)
 
@@ -55,7 +54,7 @@ async function videoSafe(conn, m, video, caption) {
     { headers: { apikey: API_KEY_SAFE } }
   )
 
-  let dl = r?.data?.result?.media?.direct
+  const dl = r?.data?.result?.media?.direct
   if (!dl) throw "Safe falló"
 
   await conn.sendMessage(
@@ -125,95 +124,29 @@ async function audioDownload(url) {
 ======================= */
 
 const handler = async (m, { conn, args, usedPrefix, command }) => {
-  global.db ||= {}
-  global.db.data ||= {}
-  global.db.data.users ||= {}
-
   const query = args.join(" ").trim()
-  if (!query) return m.reply(`✳️ Usa:\n${usedPrefix}${command} <texto>`)
 
-  const search = await yts(query)
-  const video = search.videos?.[0]
-  if (!video) throw "Sin resultados"
-
-  global.db.data.users[m.sender] ||= {}
-  global.db.data.users[m.sender].playVideo = video
-  global.db.data.users[m.sender].playTime = Date.now()
-
-  const media = await prepareWAMessageMedia(
-    { image: { url: video.thumbnail } },
-    { upload: conn.waUploadToServer }
-  )
-
-  const msg = generateWAMessageFromContent(m.chat, {
-    viewOnceMessage: {
-      message: {
-        interactiveMessage: proto.Message.InteractiveMessage.create({
-          header: proto.Message.InteractiveMessage.Header.create({
-            hasMediaAttachment: true,
-            ...media
-          }),
-          body: proto.Message.InteractiveMessage.Body.create({
-            text: `🎬 *${video.title}*\n🎥 ${video.author.name}`
-          }),
-          footer: proto.Message.InteractiveMessage.Footer.create({
-            text: "YouTube Downloader"
-          }),
-          nativeFlowMessage: proto.Message.InteractiveMessage.NativeFlowMessage.create({
-            buttons: [
-              {
-                name: "quick_reply",
-                buttonParamsJson: JSON.stringify({
-                  display_text: "🎧 Audio",
-                  id: "play_audio"
-                })
-              },
-              {
-                name: "quick_reply",
-                buttonParamsJson: JSON.stringify({
-                  display_text: "📹 Video",
-                  id: "play_video"
-                })
-              }
-            ]
-          })
-        })
-      }
-    }
-  }, { quoted: m })
-
-  await conn.relayMessage(m.chat, msg.message, {})
-}
-
-handler.before = async function (m, { conn }) {
-  const response =
-    m.message?.interactiveResponseMessage?.nativeFlowResponseMessage
-
-  if (!response) return
-
-  const { id } = JSON.parse(response.paramsJson || "{}")
-  if (!id) return
-
-  const user = global.db.data.users[m.sender]
-  if (!user?.playVideo) return
-
-  const video = user.playVideo
-  delete user.playVideo
-
-  if (id === "play_audio") {
+  if (query.startsWith("playaudio_")) {
     await conn.sendMessage(m.chat, { react: { text: "🎧", key: m.key } })
-    const dl = await audioDownload(video.url)
+    const videoId = query.split("_")[1]
+    const video = (await yts(`https://youtu.be/${videoId}`)).videos[0]
 
+    const dl = await audioDownload(video.url)
     return conn.sendMessage(
       m.chat,
-      { audio: dl.buffer, mimetype: "audio/mpeg", fileName: `${dl.title}.mp3` },
+      {
+        audio: dl.buffer,
+        mimetype: "audio/mpeg",
+        fileName: `${dl.title}.mp3`
+      },
       { quoted: m }
     )
   }
 
-  if (id === "play_video") {
+  if (query.startsWith("playvideo_")) {
     await conn.sendMessage(m.chat, { react: { text: "📹", key: m.key } })
-
+    const videoId = query.split("_")[1]
+    const video = (await yts(`https://youtu.be/${videoId}`)).videos[0]
     const caption = `🎬 ${video.title}\n🎥 ${video.author.name}`
 
     return Promise.any([
@@ -221,6 +154,36 @@ handler.before = async function (m, { conn }) {
       videoSafe(conn, m, video, caption)
     ])
   }
+
+  if (!query) {
+    return m.reply(`✳️ Usa:\n${usedPrefix}${command} <texto>`)
+  }
+
+  const search = await yts(query)
+  const video = search.videos?.[0]
+  if (!video) throw "Sin resultados"
+
+  await conn.sendMessage(
+    m.chat,
+    {
+      image: { url: video.thumbnail },
+      caption: `🎬 *${video.title}*\n🎥 ${video.author.name}`,
+      buttons: [
+        {
+          buttonId: `playaudio_${video.videoId}`,
+          buttonText: { displayText: "🎧 Audio" },
+          type: 1
+        },
+        {
+          buttonId: `playvideo_${video.videoId}`,
+          buttonText: { displayText: "📹 Video" },
+          type: 1
+        }
+      ],
+      headerType: 4
+    },
+    { quoted: m }
+  )
 }
 
 handler.command = ["play"]
