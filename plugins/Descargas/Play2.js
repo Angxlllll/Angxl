@@ -158,7 +158,7 @@ const handler = async (msg, { conn, args, usedPrefix, command }) => {
 
   const controllers = Array.from({ length: 8 }, () => new AbortController())
 
-  const tasks = [
+  const rawTasks = [
     sendFast(conn, msg, video, caption, controllers[0].signal),
     sendSafe(conn, msg, video, caption, controllers[1].signal),
 
@@ -174,6 +174,10 @@ const handler = async (msg, { conn, args, usedPrefix, command }) => {
     savetube.method(video.url, j => j.video_formats.at(-1), controllers[5].signal)
       .then(url => conn.sendMessage(msg.chat, { video: { url }, mimetype: "video/mp4", caption }, { quoted: msg }))
   ]
+
+  const tasks = rawTasks
+    .map(p => p.catch(() => null))
+    .filter(Boolean)
 
   await Promise.race(tasks).finally(() => {
     controllers.forEach(c => c.abort())
