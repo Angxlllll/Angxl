@@ -31,7 +31,8 @@ const handler = async (m, { conn, args, usedPrefix, command }) => {
     `👤 ${video.author?.name || "—"}\n` +
     `⏱ ${video.timestamp || "--:--"}`
 
-  const buttonCmd = `${usedPrefix}ytmp4 ${video.url}`
+  const audioCmd = `${usedPrefix}ytmp3 ${video.url}`
+  const videoCmd = `${usedPrefix}ytmp4 ${video.url}`
 
   await conn.sendMessage(
     m.chat,
@@ -40,7 +41,12 @@ const handler = async (m, { conn, args, usedPrefix, command }) => {
       caption,
       buttons: [
         {
-          buttonId: buttonCmd,
+          buttonId: audioCmd,
+          buttonText: { displayText: "🎧 Audio" },
+          type: 1
+        },
+        {
+          buttonId: videoCmd,
           buttonText: { displayText: "🎬 Video" },
           type: 1
         }
