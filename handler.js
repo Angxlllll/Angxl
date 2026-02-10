@@ -1,5 +1,7 @@
 import { smsg, decodeJid, all } from './lib/simple.js'
 
+Error.stackTraceLimit = 0
+
 const OWNER = new Set(
   (global.owner || []).map(o =>
     decodeJid(Array.isArray(o) ? o[0] : o)
@@ -8,7 +10,7 @@ const OWNER = new Set(
 
 const FAIL = {
   rowner: '𝖤𝗌𝗍𝖾 𝖢𝗈𝗆𝖺𝗇𝖽𝗈 𝖲𝗈𝗅𝗈 𝖯𝗎𝖾𝖽𝖾 𝖲𝖾𝗋 𝖴𝗌𝗈 𝖱𝖾𝗌𝗍𝗋𝗂𝗇𝗀𝗂𝖽𝗈',
-  owner: '𝖤𝗌𝗍𝖾 𝖢𝗈𝗆𝖺𝗇𝖽𝗈 𝖲𝗈𝗅𝗈 𝖯𝗎𝖾𝖽𝖾 𝖲𝖾𝗋 𝖴𝗍𝗂𝗅𝗂𝗓𝖺𝖽𝗈 𝖯𝗈𝗋 𝖬𝗂 𝖢𝗋𝖾𝖺𝖽𝗈𝗤',
+  owner: '𝖤𝗌𝗍𝖾 𝖢𝗈𝗆𝖺𝗇𝖽𝗈 𝖲𝗈𝗅𝗈 𝖯𝗎𝖾𝖽𝖾 𝖲𝖾𝗋 𝖴𝗍𝗂𝗅𝗂𝗓𝖺𝖽𝗈 𝖯𝗈𝗋 𝖬𝗂 𝖢𝗋𝖾𝖺𝖽𝗈𝗋',
   admin: '𝖤𝗌𝗍𝖾 𝖢𝗈𝗆𝖺𝗇𝖽𝗈 𝖲𝗈𝗅𝗈 𝖯𝗎𝖾𝖽𝖾 𝖲𝖾𝗋 𝖴𝗌𝗈 𝖣𝖾 𝖠𝖽𝗆𝗂𝗇',
   botAdmin: '𝖭𝖾𝖼𝖾𝗌𝗂𝗍𝗈 𝖲𝖾𝗋 𝖠𝖽𝗆𝗂𝗇'
 }
@@ -25,11 +27,12 @@ export function bindGroupEvents(conn) {
     if (!cached) return
     for (const jid of e.participants) {
       const j = decodeJid(jid)
-      e.action === 'promote'
-        ? cached.admins.add(j)
-        : cached.admins.delete(j)
+      if (e.action === 'promote') cached.admins.add(j)
+      else if (e.action === 'demote') cached.admins.delete(j)
     }
-    cached.t = Date.now()
+    if (e.action === 'promote' || e.action === 'demote') {
+      cached.t = Date.now()
+    }
   })
 }
 
@@ -37,32 +40,36 @@ export function handler(update) {
   const msgs = update?.messages
   if (!msgs) return
   for (const raw of msgs) {
-    Promise.resolve().then(() => handle.call(this, raw))
+    handle.call(this, raw)
   }
 }
 
 async function handle(raw) {
   const m = smsg(this, raw)
-if (!m || m.isBaileys) return
+  if (!m || m.isBaileys || !m.text) return
 
-await all(m)
-
-if (!m.text) return
+  all(m).catch(() => {})
 
   const text = m.text
   const c = text.charCodeAt(0)
+  const hasPrefix = c === 46 || c === 33
 
-  if (!global.sinprefix && c !== 46 && c !== 33) return
+  if (!global.sinprefix && !hasPrefix) return
 
-  const body = c === 46 || c === 33 ? text.slice(1) : text
+  const body = hasPrefix ? text.slice(1) : text
   const space = body.indexOf(' ')
-  const command = (space === -1 ? body : body.slice(0, space)).toLowerCase()
+  if (space === 0) return
+
+  const command =
+    (space === -1 ? body : body.slice(0, space)).toLowerCase()
+
   if (!command) return
 
+  const plugin = global.COMMAND_MAP?.get(command)
+  if (!plugin || plugin.disabled) return
+
   const args =
-    space === -1
-      ? []
-      : body.slice(space + 1).trim().split(/\s+/)
+    space === -1 ? [] : body.slice(space + 1).trim().split(/\s+/)
 
   const sender = m.sender
   const botJid = decodeJid(this.user.id)
@@ -83,9 +90,6 @@ if (!m.text) return
     }
     return
   }
-
-  const plugin = global.COMMAND_MAP?.get(command)
-  if (!plugin || plugin.disabled) return
 
   if (plugin.rowner && !isROwner)
     return global.dfail('rowner', m, this)
@@ -126,19 +130,20 @@ if (!m.text) return
   const exec = plugin.exec || plugin.default || plugin
   if (!exec) return
 
-  Promise.resolve().then(() =>
-    exec.call(this, m, {
-      conn: this,
-      args,
-      command,
-      usedPrefix: c === 46 || c === 33 ? text[0] : '',
-      participants,
-      groupMetadata,
-      isROwner,
-      isOwner,
-      isAdmin,
-      isBotAdmin,
-      chat: m.chat
-    })
-  )
+  const ctx = {
+    conn: this,
+    args,
+    command,
+    usedPrefix: hasPrefix ? text[0] : '',
+    isROwner,
+    isOwner,
+    isAdmin,
+    isBotAdmin,
+    chat: m.chat
+  }
+
+  if (participants) ctx.participants = participants
+  if (groupMetadata) ctx.groupMetadata = groupMetadata
+
+  exec.call(this, m, ctx).catch(() => {})
 }
