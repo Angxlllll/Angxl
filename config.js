@@ -8,7 +8,7 @@ global.opts = yargs(process.argv.slice(2))
 
 const OWNER = Object.freeze([
   '5215911153853@s.whatsapp.net',
-  '159606034665538@s.whatsapp.net',
+  '226044783132714',
   '3264846290995@s.whatsapp.net',
   '205819731832938@s.whatsapp.net'
 ])
