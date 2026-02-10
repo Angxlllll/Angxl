@@ -18,7 +18,7 @@ const FAIL = {
 global.dfail = (t, m, c) =>
   FAIL[t] && c.sendMessage(m.chat, { text: FAIL[t] }, { quoted: m })
 
-global.groupAdmins ||= new Map()
+const ADMIN_CACHE = new Map()
 const ADMIN_TTL = 5 * 60 * 1000
 
 export function handler(update) {
@@ -40,26 +40,22 @@ async function handle(raw) {
 
   if (!m.text) return
 
-  const text = m.text
-  const c = text.charCodeAt(0)
+  const c = m.text.charCodeAt(0)
   const hasPrefix = c === 46 || c === 33
+  if (!hasPrefix && !global.sinprefix) return
 
-  if (!global.sinprefix && !hasPrefix) return
-
-  const body = hasPrefix ? text.slice(1) : text
+  const body = hasPrefix ? m.text.slice(1) : m.text
   if (!body) return
 
   const space = body.indexOf(' ')
-  const command =
-    (space === -1 ? body : body.slice(0, space)).toLowerCase()
+  const command = (space === -1 ? body : body.slice(0, space)).toLowerCase()
 
   const plugin = global.COMMAND_MAP?.get(command)
   if (!plugin || plugin.disabled) return
 
-  const args =
-    space === -1 ? [] : body.slice(space + 1).trim().split(/\s+/)
+  const args = space === -1 ? [] : body.slice(space + 1).trim().split(/\s+/)
 
-  const sender = m.sender
+  const sender = decodeJid(m.sender)
 
   if (!this.user.jidDecoded)
     this.user.jidDecoded = decodeJid(this.user.id)
@@ -69,33 +65,25 @@ async function handle(raw) {
   const isROwner = OWNER.has(sender)
   const isOwner = isROwner
 
-  if (plugin.rowner && !isROwner)
-    return global.dfail('rowner', m, this)
-
-  if (plugin.owner && !isOwner)
-    return global.dfail('owner', m, this)
-
   let isAdmin = false
   let isBotAdmin = false
-  let participants
-  let groupMetadata
 
   if (m.isGroup && (plugin.admin || plugin.botAdmin)) {
-    let cached = global.groupAdmins.get(m.chat)
+    let cached = ADMIN_CACHE.get(m.chat)
 
     if (!cached || Date.now() - cached.t > ADMIN_TTL) {
-      this.groupMetadata(m.chat).then(meta => {
-        const admins = new Set()
-        for (const p of meta.participants) {
-          if (p.admin) admins.add(decodeJid(p.id))
-        }
-        global.groupAdmins.set(m.chat, { admins, t: Date.now() })
-      }).catch(() => {})
+      const meta = await this.groupMetadata(m.chat)
+      const admins = new Set(
+        meta.participants
+          .filter(p => p.admin)
+          .map(p => decodeJid(p.id))
+      )
+      cached = { admins, t: Date.now() }
+      ADMIN_CACHE.set(m.chat, cached)
     }
 
-    const admins = cached?.admins
-    isAdmin = isOwner || admins?.has(sender)
-    isBotAdmin = isOwner || admins?.has(botJid)
+    isAdmin = isOwner || cached.admins.has(sender)
+    isBotAdmin = isOwner || cached.admins.has(botJid)
 
     if (plugin.admin && !isAdmin)
       return global.dfail('admin', m, this)
@@ -111,7 +99,7 @@ async function handle(raw) {
     conn: this,
     args,
     command,
-    usedPrefix: hasPrefix ? text[0] : '',
+    usedPrefix: hasPrefix ? m.text[0] : '',
     isROwner,
     isOwner,
     isAdmin,
@@ -119,5 +107,7 @@ async function handle(raw) {
     chat: m.chat
   }
 
-  Promise.resolve(exec.call(this, m, ctx)).catch(() => {})
+  try {
+    await exec.call(this, m, ctx)
+  } catch {}
 }
