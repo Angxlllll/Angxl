@@ -185,11 +185,15 @@ const handler = async (m, { conn, args, usedPrefix, command }) => {
     ])
   }
 
-  if (!text) {
-    return m.reply(`✳️ Usa:\n${usedPrefix + command} <texto>`)
+    if (!query) {
+    return conn.sendMessage(
+      m.chat,
+      { text: `✳️ Usa:\n${usedPrefix}${command} <nombre del video>` },
+      { quoted: m }
+    )
   }
 
-  const search = await yts(text)
+  const search = await yts(query)
   const video = search.videos?.[0]
   if (!video) throw "Sin resultados"
 
