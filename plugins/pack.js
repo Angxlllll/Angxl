@@ -1,7 +1,7 @@
 const handler = async (m, { conn }) => {
   const txt = '👋 Hola, elige una opción:'
   const dev = 'Angel Bot'
-  const img = 'https://i.imgur.com/9QpZK0K.jpeg'
+  const img = 'https://files.catbox.moe/xr2m6u.jpg'
 
   await conn.sendMessage(m.chat, {
     image: { url: img },
