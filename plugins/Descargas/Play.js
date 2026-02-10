@@ -13,7 +13,7 @@ const handler = async (m, { conn, args, usedPrefix, command }) => {
   }
 
   await conn.sendMessage(m.chat, {
-    react: { text: "🎬", key: m.key }
+    react: { text: "🕒", key: m.key }
   })
 
   const search = await yts(query)
