@@ -48,9 +48,10 @@ export function handler(update) {
 async function handle(raw) {
   const m = smsg(this, raw)
 if (!m || m.isBaileys) return
-if (!m.text) return
 
 all(m)
+
+if (!m.text) return
 
   const text = m.text
   const c = text.charCodeAt(0)
