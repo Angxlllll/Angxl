@@ -19,26 +19,27 @@ global.dfail = (t, m, c) =>
   FAIL[t] && c.sendMessage(m.chat, { text: FAIL[t] }, { quoted: m })
 
 global.groupAdmins ||= new Map()
-const ADMIN_TTL = 20000
+const ADMIN_TTL = 60000
 
 export function bindGroupEvents(conn) {
   conn.ev.on('group-participants.update', e => {
     const cached = global.groupAdmins.get(e.id)
     if (!cached) return
+
     for (const jid of e.participants) {
       const j = decodeJid(jid)
       if (e.action === 'promote') cached.admins.add(j)
       else if (e.action === 'demote') cached.admins.delete(j)
     }
-    if (e.action === 'promote' || e.action === 'demote') {
-      cached.t = Date.now()
-    }
+
+    cached.t = Date.now()
   })
 }
 
 export function handler(update) {
   const msgs = update?.messages
   if (!msgs) return
+
   for (const raw of msgs) {
     handle.call(this, raw)
   }
@@ -46,11 +47,8 @@ export function handler(update) {
 
 async function handle(raw) {
   const m = smsg(this, raw)
-if (!m || m.isBaileys) return
-
-await all(m)
-
-if (!m.text) return
+  if (!m || m.isBaileys) return
+  if (!m.text) return
 
   all(m).catch(() => {})
 
@@ -76,13 +74,18 @@ if (!m.text) return
     space === -1 ? [] : body.slice(space + 1).trim().split(/\s+/)
 
   const sender = m.sender
-  const botJid = decodeJid(this.user.id)
+
+  if (!this.user.jidDecoded)
+    this.user.jidDecoded = decodeJid(this.user.id)
+
+  const botJid = this.user.jidDecoded
 
   const isROwner = OWNER.has(sender)
   const isOwner = isROwner
 
   if ((command === 'on' || command === 'off') && args[0] === 'sinprefix') {
     if (!isOwner) return global.dfail('owner', m, this)
+
     const enable = command === 'on'
     if (global.sinprefix !== enable) {
       global.sinprefix = enable
@@ -113,10 +116,14 @@ if (!m.text) return
     if (!cached || Date.now() - cached.t > ADMIN_TTL) {
       groupMetadata = await this.groupMetadata(m.chat)
       participants = groupMetadata.participants
-      admins = new Set(
-        participants.filter(p => p.admin).map(p => decodeJid(p.id))
-      )
-      global.groupAdmins.set(m.chat, { admins, t: Date.now() })
+
+      admins = new Set()
+      for (const p of participants) {
+        if (p.admin) admins.add(decodeJid(p.id))
+      }
+
+      cached = { admins, t: Date.now() }
+      global.groupAdmins.set(m.chat, cached)
     } else {
       admins = cached.admins
     }
