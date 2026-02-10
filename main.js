@@ -6,7 +6,6 @@ import readline from 'readline'
 import chalk from 'chalk'
 import pino from 'pino'
 import NodeCache from 'node-cache'
-import yargs from 'yargs'
 import { fileURLToPath } from 'url'
 
 import * as baileys from '@whiskeysockets/baileys'
@@ -118,23 +117,28 @@ async function startSock() {
       )
     },
     markOnlineOnConnect: false,
-    generateHighQualityLinkPreview: false,
     syncFullHistory: false,
     emitOwnEvents: false,
-    getMessage: async () => undefined,
+    generateHighQualityLinkPreview: false,
     msgRetryCounterCache,
     userDevicesCache,
     version,
-    keepAliveIntervalMs: 55000
+    keepAliveIntervalMs: 55000,
+    getMessage: async () => undefined
   })
 
   global.conn = sock
   store.bind(sock)
 
-  const groups = await sock.groupFetchAllParticipating()
-  for (const jid in groups) {
-    global.groupMetadata.set(jid, groups[jid])
-  }
+  let pairingRequested = false
+
+  sock.ev.on('creds.update', saveCreds)
+
+  sock.ev.on('messages.upsert', ({ messages, type }) => {
+    if (type !== 'notify') return
+    if (!messages?.length) return
+    handler.handler.call(sock, { messages })
+  })
 
   sock.ev.on('groups.update', async updates => {
     for (const u of updates) {
@@ -148,17 +152,9 @@ async function startSock() {
     if (meta) global.groupMetadata.set(u.id, meta)
   })
 
-  sock.ev.on('creds.update', saveCreds)
-
-  let pairingRequested = false
-
   sock.ev.on('connection.update', async update => {
-    const { connection } = update
-
-    if (connection === 'open') {
-      global.BOT_NUMBER = sock.user.id.replace(/\D/g, '')
-      console.log(chalk.greenBright('✿ Conectado'))
-    }
+    const { connection, lastDisconnect } = update
+    const reason = lastDisconnect?.error?.output?.statusCode
 
     if (
       option === '2' &&
@@ -174,38 +170,22 @@ async function startSock() {
       console.log(chalk.greenBright('\nCódigo de vinculación:\n'))
       console.log(chalk.bold(code.match(/.{1,4}/g).join(' ')))
     }
-  })
 
-  function onConnectionUpdate(update) {
-    const { connection, lastDisconnect } = update
-    const reason = lastDisconnect?.error?.output?.statusCode
+    if (connection === 'open') {
+      global.BOT_NUMBER = sock.user.id.replace(/\D/g, '')
+      console.log(chalk.greenBright('✿ Conectado'))
+
+      const groups = await sock.groupFetchAllParticipating()
+      for (const jid in groups) {
+        global.groupMetadata.set(jid, groups[jid])
+      }
+    }
 
     if (connection === 'close') {
       if (reason === DisconnectReason.loggedOut) process.exit(0)
       setTimeout(startSock, 2000)
     }
-  }
-
-  function onMessagesUpsert({ messages, type }) {
-    if (type !== 'notify') return
-    if (!messages?.length) return
-    handler.handler.call(sock, { messages })
-  }
-
-  async function reloadHandler() {
-    handler = await import(`./handler.js?update=${Date.now()}`)
-
-    if (sock._handler) sock.ev.off('messages.upsert', sock._handler)
-    if (sock._connUpdate) sock.ev.off('connection.update', sock._connUpdate)
-
-    sock._handler = onMessagesUpsert
-    sock._connUpdate = onConnectionUpdate
-
-    sock.ev.on('messages.upsert', sock._handler)
-    sock.ev.on('connection.update', sock._connUpdate)
-  }
-
-  await reloadHandler()
+  })
 }
 
 await loadPlugins(pluginRoot)
