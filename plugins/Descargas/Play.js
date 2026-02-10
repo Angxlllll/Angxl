@@ -125,6 +125,10 @@ async function audioDownload(url) {
 ======================= */
 
 const handler = async (m, { conn, args, usedPrefix, command }) => {
+  global.db ||= {}
+  global.db.data ||= {}
+  global.db.data.users ||= {}
+
   const query = args.join(" ").trim()
   if (!query) return m.reply(`✳️ Usa:\n${usedPrefix}${command} <texto>`)
 
