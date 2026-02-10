@@ -22,6 +22,8 @@ const {
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 global.groupMetadata = new Map()
+global.plugins = Object.create(null)
+global.COMMAND_MAP = new Map()
 
 const SESSION_DIR = global.sessions || 'sessions'
 const { state, saveCreds } = await useMultiFileAuthState(SESSION_DIR)
@@ -51,38 +53,19 @@ if (!option && !phoneNumber && !fs.existsSync(`./${SESSION_DIR}/creds.json`)) {
 }
 
 const pluginRoot = path.join(__dirname, 'plugins')
-global.plugins = Object.create(null)
-global.pluginCommandIndex = new Map()
-global._customPrefixPlugins = []
-global.COMMAND_MAP = new Map()
 
 function rebuildPluginIndex() {
-  global.pluginCommandIndex.clear()
-  global._customPrefixPlugins.length = 0
   global.COMMAND_MAP.clear()
 
   for (const plugin of Object.values(global.plugins)) {
     if (!plugin || plugin.disabled) continue
-
-    if (plugin.customPrefix instanceof RegExp) {
-      global._customPrefixPlugins.push(plugin)
-    }
 
     let cmds = plugin.command
     if (!cmds) continue
     if (!Array.isArray(cmds)) cmds = [cmds]
 
     for (const c of cmds) {
-      const cmd = c.toLowerCase()
-      let arr = global.pluginCommandIndex.get(cmd)
-      if (!arr) {
-        arr = []
-        global.pluginCommandIndex.set(cmd, arr)
-      }
-      arr.push(plugin)
-      if (!global.COMMAND_MAP.has(cmd)) {
-        global.COMMAND_MAP.set(cmd, plugin)
-      }
+      global.COMMAND_MAP.set(c.toLowerCase(), plugin)
     }
   }
 }
@@ -111,13 +94,10 @@ async function startSock() {
       : ['Desktop', 'Chrome', '120'],
     auth: {
       creds: state.creds,
-      keys: makeCacheableSignalKeyStore(
-        state.keys,
-        pino({ level: 'fatal' })
-      )
+      keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'fatal' }))
     },
-    markOnlineOnConnect: false,
     syncFullHistory: false,
+    markOnlineOnConnect: false,
     emitOwnEvents: false,
     generateHighQualityLinkPreview: false,
     msgRetryCounterCache,
@@ -140,18 +120,6 @@ async function startSock() {
     handler.handler.call(sock, { messages })
   })
 
-  sock.ev.on('groups.update', async updates => {
-    for (const u of updates) {
-      const meta = await sock.groupMetadata(u.id).catch(() => null)
-      if (meta) global.groupMetadata.set(u.id, meta)
-    }
-  })
-
-  sock.ev.on('group-participants.update', async u => {
-    const meta = await sock.groupMetadata(u.id).catch(() => null)
-    if (meta) global.groupMetadata.set(u.id, meta)
-  })
-
   sock.ev.on('connection.update', async update => {
     const { connection, lastDisconnect } = update
     const reason = lastDisconnect?.error?.output?.statusCode
@@ -165,20 +133,15 @@ async function startSock() {
       pairingRequested = true
       console.log(chalk.cyanBright('\nIngresa tu número con código país'))
       phoneNumber = await question('--> ')
-      const clean = phoneNumber.replace(/\D/g, '')
-      const code = await sock.requestPairingCode(clean)
+      const code = await sock.requestPairingCode(phoneNumber.replace(/\D/g, ''))
       console.log(chalk.greenBright('\nCódigo de vinculación:\n'))
       console.log(chalk.bold(code.match(/.{1,4}/g).join(' ')))
     }
 
     if (connection === 'open') {
-      global.BOT_NUMBER = sock.user.id.replace(/\D/g, '')
       console.log(chalk.greenBright('✿ Conectado'))
-
       const groups = await sock.groupFetchAllParticipating()
-      for (const jid in groups) {
-        global.groupMetadata.set(jid, groups[jid])
-      }
+      for (const jid in groups) global.groupMetadata.set(jid, groups[jid])
     }
 
     if (connection === 'close') {
@@ -191,5 +154,5 @@ async function startSock() {
 await loadPlugins(pluginRoot)
 await startSock()
 
-process.on('uncaughtException', err => console.error(err))
-process.on('unhandledRejection', err => console.error(err))
+process.on('uncaughtException', console.error)
+process.on('unhandledRejection', console.error)
