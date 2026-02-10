@@ -163,7 +163,7 @@ async function audioDownload(url) {
 ======================= */
 
 const handler = async (m, { conn, args, usedPrefix, command }) => {
-  const text = args.join(" ").trim()
+const query = args.join(" ").trim()
 
   if (text.startsWith("play:audio:")) {
     const url = `https://youtu.be/${text.split(":")[2]}`
@@ -185,12 +185,8 @@ const handler = async (m, { conn, args, usedPrefix, command }) => {
     ])
   }
 
-    if (!query) {
-    return conn.sendMessage(
-      m.chat,
-      { text: `✳️ Usa:\n${usedPrefix}${command} <nombre del video>` },
-      { quoted: m }
-    )
+  if (!query) {
+    return m.reply(`✳️ Usa:\n${usedPrefix + command} <texto>`)
   }
 
   const search = await yts(query)
