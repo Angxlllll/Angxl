@@ -1,5 +1,3 @@
-"use strict"
-
 import yts from "yt-search"
 
 const handler = async (m, { conn, args, usedPrefix, command }) => {
