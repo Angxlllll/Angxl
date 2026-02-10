@@ -97,7 +97,7 @@ signal
 })
 if (!info.data?.status) throw new Error("savetube")
 const json = savetube.decrypt(info.data.data)
-const format = json.video_formats.find(v => v.quality === 720) || json.video_formats[0]
+const format = json.video_formats[0]
 const dlRes = await axios.post(`https://${cdn}/download`, {
 id: json.id,
 key: json.key,
@@ -120,11 +120,31 @@ return downloadUrl
 
 async function sendSaveTube(conn, msg, video, caption, signal) {
 const dl = await savetube.download(video.url, signal)
+const tmp = ensureTmp()
+const filePath = path.join(tmp, `${Date.now()}.mp4`)
+const res = await axios.get(dl, {
+responseType: "stream",
+timeout: STREAM_TIMEOUT,
+signal
+})
+let size = 0
+const ws = fs.createWriteStream(filePath)
+res.data.on("data", c => {
+size += c.length
+if (size / 1024 / 1024 > MAX_MB) {
+res.data.destroy()
+ws.destroy()
+fs.existsSync(filePath) && fs.unlinkSync(filePath)
+throw new Error("large")
+}
+})
+await streamPipe(res.data, ws)
 await conn.sendMessage(
 msg.chat,
-{ video: { url: dl }, mimetype: "video/mp4", caption },
+{ video: fs.createReadStream(filePath), mimetype: "video/mp4", caption },
 { quoted: msg }
 )
+fs.existsSync(filePath) && fs.unlinkSync(filePath)
 }
 
 const handler = async (msg, { conn, args, usedPrefix, command }) => {
