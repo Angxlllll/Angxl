@@ -1,5 +1,3 @@
-"use strict"
-
 import yts from "yt-search"
 import axios from "axios"
 import crypto from "crypto"
@@ -20,30 +18,24 @@ const handler = async (m, { conn, args, usedPrefix, command }) => {
   try {
     const search = await yts(query)
     const video = search.videos?.[0]
-    if (!video) throw new Error("Sin resultados")
+    if (!video) throw "Sin resultados"
 
     const dl = await downloadAudio(video.url)
-    if (!dl?.url) throw new Error("No se pudo descargar")
+    if (!dl?.buffer) throw "No se pudo descargar"
 
     await conn.sendMessage(
       m.chat,
       {
-        audio: { url: dl.url },
+        audio: dl.buffer,
         mimetype: "audio/mpeg",
         fileName: `${dl.title}.mp3`
       },
       { quoted: m }
     )
-
-    await conn.sendMessage(
-      m.chat,
-      { text: `🏆 Api ganadora:\n${dl.api}` },
-      { quoted: m }
-    )
   } catch (e) {
     await conn.sendMessage(
       m.chat,
-      { text: `❌ Error: ${e.message || e}` },
+      { text: `❌ Error: ${e}` },
       { quoted: m }
     )
   }
@@ -56,7 +48,6 @@ handler.tags = ["descargas"]
 export default handler
 
 const savetube = {
-  name: "SaveTube",
   key: Buffer.from("C5D58EF67A7584E4A29F6C35BBC4EB12", "hex"),
 
   decrypt(enc) {
@@ -68,8 +59,8 @@ const savetube = {
   },
 
   async audio(url) {
-    const random = await axios.get("https://media.savetube.vip/api/random-cdn")
-    const cdn = random.data.cdn
+    const { data: random } = await axios.get("https://media.savetube.vip/api/random-cdn")
+    const cdn = random.cdn
 
     const info = await axios.post(`https://${cdn}/v2/info`, { url })
     if (!info.data?.status) throw "savetube info error"
@@ -88,72 +79,29 @@ const savetube = {
     const link = dl.data?.data?.downloadUrl
     if (!link) throw "savetube link error"
 
-    return { title: json.title, url: link, api: this.name }
+    const buff = await fetch(link).then(r => r.arrayBuffer())
+    return { title: json.title, buffer: Buffer.from(buff) }
   }
 }
 
 const savenow = {
-  name: "SaveNow",
   key: "dfcb6d76f2f6a9894gjkege8a4ab232222",
 
   async audio(url) {
-    const init = await fetch(
+    const r = await fetch(
       `https://p.savenow.to/ajax/download.php?format=mp3&url=${encodeURIComponent(url)}&api=${this.key}`
     ).then(r => r.json())
 
-    if (!init.success) throw "savenow init error"
+    if (!r?.success || !r?.download_url) throw "savenow error"
 
-    for (let i = 0; i < 25; i++) {
-      await new Promise(r => setTimeout(r, 2000))
-      const p = await fetch(`https://p.savenow.to/api/progress?id=${init.id}`).then(r => r.json())
-      if (p.progress === 1000) {
-        return { title: init.title, url: p.download_url, api: this.name }
-      }
-    }
-
-    throw "savenow timeout"
-  }
-}
-
-const amscraper = {
-  name: "AM Scraper",
-
-  async audio(url) {
-    const r = await axios.get(
-      `https://scrapers.hostrta.win/scraper/24?url=${encodeURIComponent(url)}`
-    )
-
-    const a =
-      r.data?.audio?.url ||
-      r.data?.formats?.find(f => f.mimeType?.includes("audio"))?.url
-
-    if (!a) throw "amscraper error"
-    return { title: r.data.title || "Audio", url: a, api: this.name }
-  }
-}
-
-const backup = {
-  name: "Backup API",
-
-  async audio(url) {
-    const r = await axios.get(
-      `https://youtube-downloader-api.vercel.app/info?url=${encodeURIComponent(url)}`
-    )
-
-    const a = r.data?.data?.formats
-      ?.filter(f => f.mimeType?.includes("audio"))
-      ?.sort((a, b) => b.bitrate - a.bitrate)[0]?.url
-
-    if (!a) throw "backup error"
-    return { title: r.data.data.title || "Audio", url: a, api: this.name }
+    const buff = await fetch(r.download_url).then(r => r.arrayBuffer())
+    return { title: r.title || "audio", buffer: Buffer.from(buff) }
   }
 }
 
 async function downloadAudio(url) {
   return await Promise.any([
     savetube.audio(url),
-    savenow.audio(url),
-    amscraper.audio(url),
-    backup.audio(url)
+    savenow.audio(url)
   ])
 }
