@@ -1,25 +1,25 @@
 const handler = async (m, { conn }) => {
-  await conn.sendMessage(
-    m.chat,
-    {
-      text: '👋 Hola, elige una opción:',
-      footer: 'Angel Bot',
-      buttons: [
-        {
-          buttonId: '.menu',
-          buttonText: { displayText: 'Menu' },
-          type: 1
-        },
-        {
-          buttonId: '.owner',
-          buttonText: { displayText: 'Owner' },
-          type: 1
-        }
-      ],
-      headerType: 1
-    },
-    { quoted: m }
-  )
+  const txt = '👋 Hola, elige una opción:'
+  const dev = 'Angel Bot'
+  const img = 'https://i.imgur.com/9QpZK0K.jpeg'
+
+  await conn.sendMessage(m.chat, {
+    image: { url: img },
+    caption: txt,
+    footer: dev,
+    buttons: [
+      {
+        buttonId: '.menu',
+        buttonText: { displayText: 'Menu' }
+      },
+      {
+        buttonId: '.owner',
+        buttonText: { displayText: 'Owner' }
+      }
+    ],
+    viewOnce: true,
+    headerType: 4
+  }, { quoted: m })
 }
 
 handler.command = ['hola']
