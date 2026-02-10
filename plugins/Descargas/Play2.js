@@ -47,10 +47,8 @@ const savetube = {
   async getInfo(url, signal) {
     const { data } = await axios.get("https://media.savetube.vip/api/random-cdn", { signal })
     const cdn = data.cdn
-
     const info = await axios.post(`https://${cdn}/v2/info`, { url }, { signal })
     if (!info.data?.status) throw new Error("SaveTube info fail")
-
     return { cdn, json: this.decrypt(info.data.data) }
   },
 
@@ -93,6 +91,8 @@ async function sendFast(conn, msg, video, caption, signal) {
     { video: { url: res.data.result.url }, mimetype: "video/mp4", caption },
     { quoted: msg }
   )
+
+  return "FAST_OK"
 }
 
 async function sendSafe(conn, msg, video, caption, signal) {
@@ -114,7 +114,7 @@ async function sendSafe(conn, msg, video, caption, signal) {
       { video: { url: dl }, mimetype: "video/mp4", caption },
       { quoted: msg }
     )
-    return
+    return "SAFE_DIRECT_OK"
   } catch {}
 
   const tmp = ensureTmp()
@@ -142,6 +142,7 @@ async function sendSafe(conn, msg, video, caption, signal) {
   )
 
   fs.unlinkSync(file)
+  return "SAFE_FILE_OK"
 }
 
 const handler = async (msg, { conn, args, usedPrefix, command }) => {
@@ -156,32 +157,38 @@ const handler = async (msg, { conn, args, usedPrefix, command }) => {
 
   const caption = `🎬 *${video.title}*\n⏱ ${video.timestamp}`
 
-  const controllers = Array.from({ length: 8 }, () => new AbortController())
+  const controllers = Array.from({ length: 6 }, () => new AbortController())
 
   const rawTasks = [
     sendFast(conn, msg, video, caption, controllers[0].signal),
     sendSafe(conn, msg, video, caption, controllers[1].signal),
 
     savetube.method(video.url, j => j.video_formats.find(v => v.hasAudio), controllers[2].signal)
-      .then(url => conn.sendMessage(msg.chat, { video: { url }, mimetype: "video/mp4", caption }, { quoted: msg })),
+      .then(async url => {
+        await conn.sendMessage(msg.chat, { video: { url }, mimetype: "video/mp4", caption }, { quoted: msg })
+        return "ST_AUDIO_OK"
+      }),
 
     savetube.method(video.url, j => j.video_formats[0], controllers[3].signal)
-      .then(url => conn.sendMessage(msg.chat, { video: { url }, mimetype: "video/mp4", caption }, { quoted: msg })),
+      .then(async url => {
+        await conn.sendMessage(msg.chat, { video: { url }, mimetype: "video/mp4", caption }, { quoted: msg })
+        return "ST_FIRST_OK"
+      }),
 
-    savetube.method(video.url, j => j.video_formats.find(v => !v.hasAudio), controllers[4].signal)
-      .then(url => conn.sendMessage(msg.chat, { video: { url }, mimetype: "video/mp4", caption }, { quoted: msg })),
-
-    savetube.method(video.url, j => j.video_formats.at(-1), controllers[5].signal)
-      .then(url => conn.sendMessage(msg.chat, { video: { url }, mimetype: "video/mp4", caption }, { quoted: msg }))
+    savetube.method(video.url, j => j.video_formats.at(-1), controllers[4].signal)
+      .then(async url => {
+        await conn.sendMessage(msg.chat, { video: { url }, mimetype: "video/mp4", caption }, { quoted: msg })
+        return "ST_LAST_OK"
+      })
   ]
 
-  const tasks = rawTasks
-    .map(p => p.catch(() => null))
-    .filter(Boolean)
+  const tasks = rawTasks.map(p => p.catch(() => null))
 
-  await Promise.race(tasks).finally(() => {
-    controllers.forEach(c => c.abort())
-  })
+  const winner = await Promise.race(tasks)
+
+  controllers.forEach(c => c.abort())
+
+  if (!winner) throw new Error("Ningún método pudo enviar el video")
 }
 
 handler.command = ["play2"]
