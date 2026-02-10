@@ -4,8 +4,9 @@ import yts from "yt-search"
 import axios from "axios"
 import crypto from "crypto"
 
-const handler = async (m, { conn, text, usedPrefix, command }) => {
-  if (!text) {
+const handler = async (m, { conn, args, usedPrefix, command }) => {
+  const query = args.join(" ").trim()
+  if (!query) {
     return conn.sendMessage(
       m.chat,
       { text: `✳️ Usa:\n${usedPrefix}${command} <nombre del video>` },
