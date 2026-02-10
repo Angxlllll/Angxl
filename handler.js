@@ -9,81 +9,52 @@ const OWNER = new Set(
 )
 
 const FAIL = {
-  rowner: 'Este comando es solo para el owner',
-  owner: 'Este comando es solo para el owner',
-  admin: 'Este comando es solo para admins',
-  botAdmin: 'Necesito ser admin'
+  rowner: 'Solo el owner',
+  owner: 'Solo el owner',
+  admin: 'Solo admins',
+  botAdmin: 'Necesito admin'
 }
 
 global.dfail = (t, m, c) =>
   FAIL[t] && c.sendMessage(m.chat, { text: FAIL[t] }, { quoted: m })
 
-function getGroupAdmins(jid) {
-  const meta = global.groupMetadata.get(jid)
-  if (!meta) return null
-  return new Set(
-    meta.participants
-      .filter(p => p.admin)
-      .map(p => decodeJid(p.id))
-  )
-}
-
-export function handler(update) {
+export async function handler(update) {
   const msgs = update?.messages
   if (!msgs) return
 
   for (const raw of msgs) {
     if (!raw.message) continue
     if (raw.key?.remoteJid === 'status@broadcast') continue
-    process.call(this, raw)
+    await process.call(this, raw)
   }
 }
 
 async function process(raw) {
-  const m = smsg(this, raw)
+  const m = await smsg(this, raw)
   if (!m || m.isBaileys) return
 
   all(m)
 
-  const text = m.text
-  if (!text) return
+  if (!m.text) return
 
-  const prefix = text[0]
+  const prefix = m.text[0]
   if (prefix !== '.' && prefix !== '!') return
 
-  const body = text.slice(1).trim()
+  const body = m.text.slice(1).trim()
   if (!body) return
 
-  const space = body.indexOf(' ')
-  const command = (space === -1 ? body : body.slice(0, space)).toLowerCase()
+  const [cmd, ...args] = body.split(/\s+/)
+  const command = cmd.toLowerCase()
 
   const plugin = global.COMMAND_MAP.get(command)
   if (!plugin || plugin.disabled) return
 
-  const args = space === -1 ? [] : body.slice(space + 1).split(/\s+/)
-
   const sender = decodeJid(m.sender)
-  const botJid = decodeJid(this.user.id)
 
   const isROwner = OWNER.has(sender)
   const isOwner = isROwner
-
-  let isAdmin = false
-  let isBotAdmin = false
-
-  if (m.isGroup && (plugin.admin || plugin.botAdmin)) {
-    const admins = getGroupAdmins(m.chat)
-    if (!admins) return
-
-    isAdmin = isOwner || admins.has(sender)
-    isBotAdmin = isOwner || admins.has(botJid)
-
-    if (plugin.admin && !isAdmin)
-      return global.dfail('admin', m, this)
-
-    if (plugin.botAdmin && !isBotAdmin)
-      return global.dfail('botAdmin', m, this)
-  }
+  const isAdmin = m.isGroup ? (isOwner || m.isAdmin) : false
+  const isBotAdmin = m.isGroup ? (isOwner || m.isBotAdmin) : false
 
   if (plugin.rowner && !isROwner)
     return global.dfail('rowner', m, this)
@@ -91,10 +62,16 @@ async function process(raw) {
   if (plugin.owner && !isOwner)
     return global.dfail('owner', m, this)
 
+  if (plugin.admin && !isAdmin)
+    return global.dfail('admin', m, this)
+
+  if (plugin.botAdmin && !isBotAdmin)
+    return global.dfail('botAdmin', m, this)
+
   const exec = plugin.exec || plugin.default || plugin
   if (!exec) return
 
-  exec.call(this, m, {
+  await exec.call(this, m, {
     conn: this,
     args,
     command,
@@ -102,7 +79,6 @@ async function process(raw) {
     isROwner,
     isOwner,
     isAdmin,
-    isBotAdmin,
-    chat: m.chat
+    isBotAdmin
   })
 }
