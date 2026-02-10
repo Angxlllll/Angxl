@@ -175,7 +175,7 @@ const handler = async (m, { conn, args, usedPrefix, command }) => {
           type: 1
         },
         {
-          buttonId: `playvideo_${video.videoId}`,
+          buttonId: `ytmp4 ${video.videoId}`,
           buttonText: { displayText: "📹 Video" },
           type: 1
         }
