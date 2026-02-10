@@ -9,40 +9,31 @@ const handler = async (m, { conn, args, usedPrefix, command }) => {
   if (!query) {
     return conn.sendMessage(
       m.chat,
-      { text: `✳️ Usa:\n${usedPrefix}${command} <nombre del video>` },
+      { text: `✳️ Usa:\n${usedPrefix}${command} <nombre del audio>` },
       { quoted: m }
     )
   }
 
-  await conn.sendMessage(m.chat, { react: { text: "🎬", key: m.key } })
+  await conn.sendMessage(m.chat, { react: { text: "🎧", key: m.key } })
 
   try {
     const search = await yts(query)
     const video = search.videos?.[0]
     if (!video) throw new Error("Sin resultados")
 
-    const dl = await savetube.download(video.url)
+    const dl = await savetube.download(video.url, "audio")
     if (!dl.status) throw new Error(dl.error || "Fallo en la API")
 
-    const videoRes = await axios.get(dl.result.download, {
-      responseType: "arraybuffer",
-      headers: {
-        "User-Agent": "Mozilla/5.0",
-        origin: "https://save-tube.com",
-        referer: "https://save-tube.com/"
-      }
-    })
-
     const caption =
-      `🎬 *${dl.result.title}*\n` +
-      `⏱ ${video.timestamp || "--:--"}\n` +
-      `🎥 ${video.author?.name || "—"}`
+      `🎧 *${dl.result.title}*\n` +
+      `👤 ${video.author?.name || "—"}\n` +
+      `⏱ ${video.timestamp || "--:--"}`
 
     await conn.sendMessage(
       m.chat,
       {
-        video: Buffer.from(videoRes.data),
-        mimetype: "video/mp4",
+        audio: { url: dl.result.download },
+        mimetype: "audio/mpeg",
         caption
       },
       { quoted: m }
@@ -56,8 +47,8 @@ const handler = async (m, { conn, args, usedPrefix, command }) => {
   }
 }
 
-handler.command = ["play3"]
-handler.help = ["play3 <texto>"]
+handler.command = ["play"]
+handler.help = ["play <texto>"]
 handler.tags = ["descargas"]
 
 export default handler
@@ -73,7 +64,7 @@ const savetube = {
     return JSON.parse(Buffer.concat([d.update(data), d.final()]).toString())
   },
 
-  async download(url) {
+  async download(url, type = "audio") {
     try {
       const random = await axios.get("https://media.savetube.vip/api/random-cdn", {
         headers: {
@@ -98,14 +89,13 @@ const savetube = {
         }
       )
 
-      if (!info.data?.status) return { status: false, error: "Video no disponible" }
+      if (!info.data?.status) return { status: false, error: "No disponible" }
 
       const json = this.decrypt(info.data.data)
 
       const format =
-        json.video_formats.find(v => v.quality === 480) ||
-        json.video_formats.find(v => v.quality === 360) ||
-        json.video_formats[0]
+        json.audio_formats.find(a => a.quality === 128) ||
+        json.audio_formats[0]
 
       if (!format) return { status: false, error: "Formato no disponible" }
 
@@ -114,7 +104,7 @@ const savetube = {
         {
           id: json.id,
           key: json.key,
-          downloadType: "video",
+          downloadType: "audio",
           quality: String(format.quality)
         },
         {
@@ -128,7 +118,7 @@ const savetube = {
       )
 
       const downloadUrl = dlRes.data?.data?.downloadUrl
-      if (!downloadUrl) return { status: false, error: "No se pudo generar el enlace" }
+      if (!downloadUrl) return { status: false, error: "Sin enlace" }
 
       return {
         status: true,
