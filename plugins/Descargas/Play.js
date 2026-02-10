@@ -11,10 +11,6 @@ import { promisify } from "util"
 
 const streamPipe = promisify(pipeline)
 
-/* =======================
-   CONFIG
-======================= */
-
 const API_BASE_FAST = (global.APIs?.may || "").replace(/\/+$/, "")
 const API_KEY_FAST = global.APIKeys?.may || ""
 
@@ -23,19 +19,11 @@ const API_KEY_SAFE = "Angxll"
 
 const MAX_MB = 200
 
-/* =======================
-   UTIL
-======================= */
-
 function ensureTmp() {
   const dir = path.join(process.cwd(), "tmp")
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
   return dir
 }
-
-/* =======================
-   VIDEO
-======================= */
 
 async function videoFast(conn, m, video, caption) {
   if (!API_BASE_FAST || !API_KEY_FAST) throw "Fast no disponible"
@@ -103,10 +91,6 @@ async function videoSafe(conn, m, video, caption) {
   fs.unlinkSync(file)
 }
 
-/* =======================
-   AUDIO
-======================= */
-
 const savetube = {
   key: Buffer.from("C5D58EF67A7584E4A29F6C35BBC4EB12", "hex"),
 
@@ -158,35 +142,45 @@ async function audioDownload(url) {
   ])
 }
 
-/* =======================
-   HANDLER
-======================= */
-
 const handler = async (m, { conn, args, usedPrefix, command }) => {
-const query = args.join(" ").trim()
+  const query = (args.length ? args.join(" ") : m.text).trim()
 
   if (query.startsWith("play:audio:")) {
+    await conn.sendMessage(m.chat, {
+      react: { text: "🎧", key: m.key }
+    })
+
     const url = `https://youtu.be/${query.split(":")[2]}`
     const dl = await audioDownload(url)
+
     return conn.sendMessage(
       m.chat,
-      { audio: dl.buffer, mimetype: "audio/mpeg", fileName: `${dl.title}.mp3` },
+      {
+        audio: dl.buffer,
+        mimetype: "audio/mpeg",
+        fileName: `${dl.title}.mp3`
+      },
       { quoted: m }
     )
   }
 
   if (query.startsWith("play:video:")) {
+    await conn.sendMessage(m.chat, {
+      react: { text: "📹", key: m.key }
+    })
+
     const url = `https://youtu.be/${query.split(":")[2]}`
     const video = (await yts(url)).videos[0]
-    const cap = `🎬 ${video.title}\n🎥 ${video.author.name}`
+    const caption = `🎬 ${video.title}\n🎥 ${video.author.name}`
+
     return Promise.any([
-      videoFast(conn, m, video, cap),
-      videoSafe(conn, m, video, cap)
+      videoFast(conn, m, video, caption),
+      videoSafe(conn, m, video, caption)
     ])
   }
 
   if (!query) {
-    return m.reply(`✳️ Usa:\n${usedPrefix + command} <texto>`)
+    return m.reply(`✳️ Usa:\n${usedPrefix}${command} <texto>`)
   }
 
   const search = await yts(query)
