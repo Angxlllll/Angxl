@@ -20,10 +20,10 @@ const handler = async (m, { conn, args, usedPrefix, command }) => {
   try {
     const search = await yts(query)
     const video = search.videos?.[0]
-    if (!video) throw "Sin resultados"
+    if (!video) throw new Error("Sin resultados")
 
     const dl = await downloadAudio(video.url)
-    if (!dl?.url) throw "No se pudo descargar"
+    if (!dl?.url) throw new Error("No se pudo descargar")
 
     await conn.sendMessage(
       m.chat,
@@ -32,6 +32,12 @@ const handler = async (m, { conn, args, usedPrefix, command }) => {
         mimetype: "audio/mpeg",
         fileName: `${dl.title}.mp3`
       },
+      { quoted: m }
+    )
+
+    await conn.sendMessage(
+      m.chat,
+      { text: `🏆 Api ganadora:\n${dl.api}` },
       { quoted: m }
     )
   } catch (e) {
@@ -50,6 +56,7 @@ handler.tags = ["descargas"]
 export default handler
 
 const savetube = {
+  name: "SaveTube",
   key: Buffer.from("C5D58EF67A7584E4A29F6C35BBC4EB12", "hex"),
 
   decrypt(enc) {
@@ -81,11 +88,12 @@ const savetube = {
     const link = dl.data?.data?.downloadUrl
     if (!link) throw "savetube link error"
 
-    return { title: json.title, url: link }
+    return { title: json.title, url: link, api: this.name }
   }
 }
 
 const savenow = {
+  name: "SaveNow",
   key: "dfcb6d76f2f6a9894gjkege8a4ab232222",
 
   async audio(url) {
@@ -99,7 +107,7 @@ const savenow = {
       await new Promise(r => setTimeout(r, 2000))
       const p = await fetch(`https://p.savenow.to/api/progress?id=${init.id}`).then(r => r.json())
       if (p.progress === 1000) {
-        return { title: init.title, url: p.download_url }
+        return { title: init.title, url: p.download_url, api: this.name }
       }
     }
 
@@ -108,6 +116,8 @@ const savenow = {
 }
 
 const amscraper = {
+  name: "AM Scraper",
+
   async audio(url) {
     const r = await axios.get(
       `https://scrapers.hostrta.win/scraper/24?url=${encodeURIComponent(url)}`
@@ -118,11 +128,13 @@ const amscraper = {
       r.data?.formats?.find(f => f.mimeType?.includes("audio"))?.url
 
     if (!a) throw "amscraper error"
-    return { title: r.data.title || "Audio", url: a }
+    return { title: r.data.title || "Audio", url: a, api: this.name }
   }
 }
 
 const backup = {
+  name: "Backup API",
+
   async audio(url) {
     const r = await axios.get(
       `https://youtube-downloader-api.vercel.app/info?url=${encodeURIComponent(url)}`
@@ -133,28 +145,15 @@ const backup = {
       ?.sort((a, b) => b.bitrate - a.bitrate)[0]?.url
 
     if (!a) throw "backup error"
-    return { title: r.data.data.title || "Audio", url: a }
+    return { title: r.data.data.title || "Audio", url: a, api: this.name }
   }
 }
 
 async function downloadAudio(url) {
-  const tasks = [
+  return await Promise.any([
     savetube.audio(url),
     savenow.audio(url),
     amscraper.audio(url),
     backup.audio(url)
-  ]
-
-  try {
-    return await Promise.any(
-      tasks.map(p =>
-        Promise.resolve(p).then(r => {
-          if (!r?.url) throw "invalid"
-          return r
-        })
-      )
-    )
-  } catch {
-    throw "todas las apis fallaron"
-  }
+  ])
 }
