@@ -165,7 +165,7 @@ async function audioDownload(url) {
 const handler = async (m, { conn, args, usedPrefix, command }) => {
 const query = args.join(" ").trim()
 
-  if (text.startsWith("play:audio:")) {
+  if (query.startsWith("play:audio:")) {
     const url = `https://youtu.be/${query.split(":")[2]}`
     const dl = await audioDownload(url)
     return conn.sendMessage(
@@ -175,7 +175,7 @@ const query = args.join(" ").trim()
     )
   }
 
-  if (text.startsWith("play:video:")) {
+  if (query.startsWith("play:video:")) {
     const url = `https://youtu.be/${query.split(":")[2]}`
     const video = (await yts(url)).videos[0]
     const cap = `🎬 ${video.title}\n🎥 ${video.author.name}`
