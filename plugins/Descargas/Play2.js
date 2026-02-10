@@ -128,7 +128,7 @@ fails++
 if (fails === tasks.length) reject(new Error("Todas las APIs fallaron"))
 })
 })
-}
+})
 
 const handler = async (msg, { conn, args, usedPrefix, command }) => {
 const query = args.join(" ").trim()
