@@ -9,10 +9,10 @@ const OWNER = new Set(
 )
 
 const FAIL = {
-  rowner: '𝖤𝗌𝗍𝖾 𝖢𝗈𝗆𝖺𝗇𝖽𝗈 𝖲𝗈𝗅𝗈 𝖯𝗎𝖾𝖽𝖾 𝖲𝖾𝗋 𝖴𝗌𝗈 𝖱𝖾𝗌𝗍𝗋𝗂𝗇𝗀𝗂𝖽𝗈',
-  owner: '𝖤𝗌𝗍𝖾 𝖢𝗈𝗆𝖺𝗇𝖽𝗈 𝖲𝗈𝗅𝗈 𝖯𝗎𝖾𝖽𝖾 𝖲𝖾𝗋 𝖴𝗍𝗂𝗅𝗂𝗓𝖺𝖽𝗈 𝖯𝗈𝗋 𝖬𝗂 𝖢𝗋𝖾𝖺𝖽𝗈𝗋',
-  admin: '𝖤𝗌𝗍𝖾 𝖢𝗈𝗆𝖺𝗇𝖽𝗈 𝖲𝗈𝗅𝗈 𝖯𝗎𝖾𝖽𝖾 𝖲𝖾𝗋 𝖴𝗌𝗈 𝖣𝖾 𝖠𝖽𝗆𝗂𝗇',
-  botAdmin: '𝖭𝖾𝖼𝖾𝗌𝗂𝗍𝗈 𝖲𝖾𝗋 𝖠𝖽𝗆𝗂𝗇'
+  rowner: 'Este comando es solo para el owner',
+  owner: 'Este comando es solo para el owner',
+  admin: 'Este comando es solo para admins',
+  botAdmin: 'Necesito ser admin'
 }
 
 global.dfail = (t, m, c) =>
@@ -48,27 +48,22 @@ async function process(raw) {
   const text = m.text
   if (!text) return
 
-  const c = text.charCodeAt(0)
-  const hasPrefix = c === 46 || c === 33
-  if (!hasPrefix && !global.sinprefix) return
+  const prefix = text[0]
+  if (prefix !== '.' && prefix !== '!') return
 
-  const body = hasPrefix ? text.slice(1) : text
+  const body = text.slice(1).trim()
   if (!body) return
 
   const space = body.indexOf(' ')
   const command = (space === -1 ? body : body.slice(0, space)).toLowerCase()
 
-  const plugin = global.COMMAND_MAP?.get(command)
+  const plugin = global.COMMAND_MAP.get(command)
   if (!plugin || plugin.disabled) return
 
-  const args = space === -1 ? [] : body.slice(space + 1).trim().split(/\s+/)
+  const args = space === -1 ? [] : body.slice(space + 1).split(/\s+/)
 
   const sender = decodeJid(m.sender)
-
-  if (!this.user.jidDecoded)
-    this.user.jidDecoded = decodeJid(this.user.id)
-
-  const botJid = this.user.jidDecoded
+  const botJid = decodeJid(this.user.id)
 
   const isROwner = OWNER.has(sender)
   const isOwner = isROwner
@@ -99,19 +94,15 @@ async function process(raw) {
   const exec = plugin.exec || plugin.default || plugin
   if (!exec) return
 
-  const ctx = {
+  exec.call(this, m, {
     conn: this,
     args,
     command,
-    usedPrefix: hasPrefix ? text[0] : '',
+    usedPrefix: prefix,
     isROwner,
     isOwner,
     isAdmin,
     isBotAdmin,
     chat: m.chat
-  }
-
-  try {
-    exec.call(this, m, ctx)
-  } catch {}
+  })
 }
