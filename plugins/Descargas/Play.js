@@ -166,7 +166,7 @@ const handler = async (m, { conn, args, usedPrefix, command }) => {
 const query = args.join(" ").trim()
 
   if (text.startsWith("play:audio:")) {
-    const url = `https://youtu.be/${text.split(":")[2]}`
+    const url = `https://youtu.be/${query.split(":")[2]}`
     const dl = await audioDownload(url)
     return conn.sendMessage(
       m.chat,
@@ -176,7 +176,7 @@ const query = args.join(" ").trim()
   }
 
   if (text.startsWith("play:video:")) {
-    const url = `https://youtu.be/${text.split(":")[2]}`
+    const url = `https://youtu.be/${query.split(":")[2]}`
     const video = (await yts(url)).videos[0]
     const cap = `🎬 ${video.title}\n🎥 ${video.author.name}`
     return Promise.any([
