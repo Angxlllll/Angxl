@@ -193,8 +193,8 @@ const handler = async (m, { conn, args, usedPrefix, command }) => {
       image: { url: video.thumbnail },
       caption: `🎬 *${video.title}*\n🎥 ${video.author.name}`,
       buttons: [
-        { buttonId: `play:audio:${video.videoId}`, buttonText: { displayText: "🎧 Audio" }, type: 1 },
-        { buttonId: `play:video:${video.videoId}`, buttonText: { displayText: "🎬 Video" }, type: 1 }
+        { buttonId: `.play:audio:${video.videoId}`, buttonText: { displayText: "🎧 Audio" }, type: 1 },
+        { buttonId: `.play:video:${video.videoId}`, buttonText: { displayText: "🎬 Video" }, type: 1 }
       ],
       headerType: 4
     },
