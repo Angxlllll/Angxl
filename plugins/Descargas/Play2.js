@@ -4,7 +4,6 @@ import axios from "axios"
 import yts from "yt-search"
 import fs from "fs"
 import path from "path"
-import crypto from "crypto"
 import { pipeline } from "stream"
 import { promisify } from "util"
 
@@ -26,240 +25,167 @@ function ensureTmp() {
   return tmp
 }
 
-async function sendFast(conn, msg, video, caption, signal) {
+function isSkyUrl(url = "") {
+  try {
+    return new URL(url).host === new URL(API_BASE_ENV).host
+  } catch {
+    return false
+  }
+}
+
+async function sendFast(conn, m, video, caption) {
+  if (!API_BASE_GLOBAL || !API_KEY_GLOBAL) throw new Error("Fast no configurado")
+
   const res = await axios.get(`${API_BASE_GLOBAL}/ytdl`, {
     params: {
       url: video.url,
       type: "mp4",
       apikey: API_KEY_GLOBAL
     },
-    timeout: 20000,
-    signal
+    timeout: 20000
   })
 
-  if (!res?.data?.status || !res.data.result?.url) throw new Error("fast")
+  if (!res?.data?.status || !res.data.result?.url) throw new Error("Fast falló")
 
   await conn.sendMessage(
-    msg.chat,
+    m.chat,
     {
       video: { url: res.data.result.url },
       mimetype: "video/mp4",
       caption
     },
-    { quoted: msg }
+    { quoted: m }
   )
 }
 
-async function sendSafe(conn, msg, video, caption, signal) {
+async function sendSafe(conn, m, video, caption) {
   const r = await axios.post(
     `${API_BASE_ENV}/youtube/resolve`,
-    {
-      url: video.url,
-      type: "video"
-    },
+    { url: video.url, type: "video" },
     {
       headers: { apikey: API_KEY_ENV },
-      validateStatus: () => true,
-      signal
+      validateStatus: () => true
     }
   )
 
   const data = r.data
-  if (!data?.result?.media) throw new Error("safe")
+  if (!data?.result?.media) throw new Error("Safe falló")
 
   let dl = data.result.media.dl_download || data.result.media.direct
-  if (!dl) throw new Error("safe")
-
+  if (!dl) throw new Error("Sin URL de descarga")
   if (dl.startsWith("/")) dl = API_BASE_ENV + dl
 
-  await conn.sendMessage(
-    msg.chat,
-    {
-      video: { url: dl },
-      mimetype: "video/mp4",
-      caption
-    },
-    { quoted: msg }
-  )
-}
+  const headers = isSkyUrl(dl) ? { apikey: API_KEY_ENV } : {}
 
-const savetube = {
-  key: Buffer.from("C5D58EF67A7584E4A29F6C35BBC4EB12", "hex"),
-
-  decrypt(enc) {
-    const b = Buffer.from(enc.replace(/\s/g, ""), "base64")
-    const iv = b.subarray(0, 16)
-    const data = b.subarray(16)
-    const d = crypto.createDecipheriv("aes-128-cbc", this.key, iv)
-    return JSON.parse(Buffer.concat([d.update(data), d.final()]).toString())
-  },
-
-  async download(url, signal) {
-    const random = await axios.get(
-      "https://media.savetube.vip/api/random-cdn",
+  try {
+    await conn.sendMessage(
+      m.chat,
       {
-        headers: {
-          origin: "https://save-tube.com",
-          referer: "https://save-tube.com/",
-          "User-Agent": "Mozilla/5.0"
-        },
-        signal
-      }
-    )
-
-    const cdn = random.data.cdn
-
-    const info = await axios.post(
-      `https://${cdn}/v2/info`,
-      { url },
-      {
-        headers: {
-          "Content-Type": "application/json",
-          origin: "https://save-tube.com",
-          referer: "https://save-tube.com/",
-          "User-Agent": "Mozilla/5.0"
-        },
-        signal
-      }
-    )
-
-    if (!info.data?.status) throw new Error("savetube")
-
-    const json = this.decrypt(info.data.data)
-    const format = json.video_formats?.[0]
-    if (!format) throw new Error("savetube")
-
-    const dlRes = await axios.post(
-      `https://${cdn}/download`,
-      {
-        id: json.id,
-        key: json.key,
-        downloadType: "video",
-        quality: String(format.quality)
+        video: { url: dl },
+        mimetype: "video/mp4",
+        caption
       },
-      {
-        headers: {
-          "Content-Type": "application/json",
-          origin: "https://save-tube.com",
-          referer: "https://save-tube.com/",
-          "User-Agent": "Mozilla/5.0"
-        },
-        signal
-      }
+      { quoted: m }
     )
-
-    const downloadUrl = dlRes.data?.data?.downloadUrl
-    if (!downloadUrl) throw new Error("savetube")
-
-    return downloadUrl
-  }
-}
-
-async function sendSaveTube(conn, msg, video, caption, signal) {
-  const dl = await savetube.download(video.url, signal)
+    return
+  } catch {}
 
   const tmp = ensureTmp()
   const filePath = path.join(tmp, `${Date.now()}.mp4`)
 
-  const res = await axios.get(dl, {
+  const resStream = await axios.get(dl, {
     responseType: "stream",
     timeout: STREAM_TIMEOUT,
-    signal
+    headers,
+    validateStatus: () => true
   })
 
-  let size = 0
-  const ws = fs.createWriteStream(filePath)
+  if (resStream.status >= 400) throw new Error(`HTTP_${resStream.status}`)
 
-  res.data.on("data", chunk => {
+  let size = 0
+  const writeStream = fs.createWriteStream(filePath)
+
+  resStream.data.on("data", chunk => {
     size += chunk.length
     if (size / 1024 / 1024 > MAX_MB) {
-      res.data.destroy()
-      ws.destroy()
+      resStream.data.destroy()
+      writeStream.destroy()
+      if (fs.existsSync(filePath)) fs.unlinkSync(filePath)
+      throw new Error("Video demasiado grande")
     }
   })
 
-  await streamPipe(res.data, ws)
+  await streamPipe(resStream.data, writeStream)
 
   await conn.sendMessage(
-    msg.chat,
+    m.chat,
     {
-      video: fs.createReadStream(filePath),
+      video: { stream: fs.createReadStream(filePath), length: size },
       mimetype: "video/mp4",
       caption
     },
-    { quoted: msg }
+    { quoted: m }
   )
 
-  fs.existsSync(filePath) && fs.unlinkSync(filePath)
+  if (fs.existsSync(filePath)) fs.unlinkSync(filePath)
 }
 
-function firstSuccess(tasks, controllers) {
-  return new Promise((resolve, reject) => {
-    let fails = 0
-
-    tasks.forEach((p, i) => {
-      p.then(() => {
-        controllers.forEach((c, idx) => idx !== i && c.abort())
-        resolve()
-      }).catch(() => {
-        fails++
-        if (fails === tasks.length) reject(new Error("Todas las APIs fallaron"))
-      })
-    })
-  })
-}
-
-const handler = async (msg, { conn, args, usedPrefix, command }) => {
+const handler = async (m, { conn, args, usedPrefix, command }) => {
   const query = args.join(" ").trim()
   if (!query) {
     return conn.sendMessage(
-      msg.chat,
+      m.chat,
       { text: `✳️ Usa:\n${usedPrefix}${command} <nombre del video>` },
-      { quoted: msg }
+      { quoted: m }
     )
   }
 
-  await conn.sendMessage(msg.chat, {
-    react: { text: "🎬", key: msg.key }
+  await conn.sendMessage(m.chat, {
+    react: { text: "🎬", key: m.key }
   })
 
-  const search = await yts(query)
-  const video = search.videos?.[0]
-  if (!video) throw new Error("Sin resultados")
+  let finished = false
 
-  const caption =
-    `🎬 *${video.title}*\n` +
-    `🎥 ${video.author?.name || "—"}\n` +
-    `⏱ ${video.timestamp || "--:--"}`
+  const timeoutPromise = new Promise((_, reject) =>
+    setTimeout(() => {
+      if (!finished) reject(new Error("Tiempo de espera agotado"))
+    }, TIMEOUT_MS)
+  )
 
-  const controllers = [
-    new AbortController(),
-    new AbortController(),
-    new AbortController()
-  ]
+  try {
+    await Promise.race([
+      (async () => {
+        const search = await yts(query)
+        const video = search.videos?.[0]
+        if (!video) throw new Error("Sin resultados")
 
-  const tasks = [
-    sendFast(conn, msg, video, caption, controllers[0].signal),
-    sendSafe(conn, msg, video, caption, controllers[1].signal),
-    sendSaveTube(conn, msg, video, caption, controllers[2].signal)
-  ]
+        const caption =
+          `🎬 *${video.title}*\n` +
+          `🎥 ${video.author?.name || "—"}\n` +
+          `⏱ ${video.timestamp || "--:--"}`
 
-  await Promise.race([
-    firstSuccess(tasks, controllers),
-    new Promise((_, r) =>
-      setTimeout(() => r(new Error("Tiempo de espera agotado")), TIMEOUT_MS)
-    )
-  ]).catch(async e => {
+        try {
+          await sendFast(conn, m, video, caption)
+          finished = true
+          return
+        } catch {}
+
+        await sendSafe(conn, m, video, caption)
+        finished = true
+      })(),
+      timeoutPromise
+    ])
+  } catch (err) {
     await conn.sendMessage(
-      msg.chat,
-      { text: `❌ Error: ${e.message}` },
-      { quoted: msg }
+      m.chat,
+      { text: `❌ Error: ${err?.message || "Fallo interno"}` },
+      { quoted: m }
     )
-  })
+  }
 }
 
 handler.command = ["play2"]
+handler.help = ["play2 <texto>"]
 handler.tags = ["descargas"]
-handler.help = ["play2"]
 
 export default handler
