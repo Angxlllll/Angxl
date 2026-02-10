@@ -17,7 +17,6 @@ const API_BASE_ENV = (process.env.API_BASE || "https://api-sky.ultraplus.click")
 const API_KEY_ENV = process.env.API_KEY || "Angxll"
 
 const MAX_MB = 200
-const TIMEOUT_MS = 60000
 const STREAM_TIMEOUT = 300000
 
 function ensureTmp() {
@@ -45,28 +44,18 @@ const savetube = {
     return JSON.parse(Buffer.concat([d.update(data), d.final()]).toString())
   },
 
-  async download(url, signal) {
-    const random = await axios.get("https://media.savetube.vip/api/random-cdn", { signal })
-    const cdn = random.data.cdn
+  async getInfo(url, signal) {
+    const { data } = await axios.get("https://media.savetube.vip/api/random-cdn", { signal })
+    const cdn = data.cdn
 
-    const info = await axios.post(
-      `https://${cdn}/v2/info`,
-      { url },
-      { signal }
-    )
-
+    const info = await axios.post(`https://${cdn}/v2/info`, { url }, { signal })
     if (!info.data?.status) throw new Error("SaveTube info fail")
 
-    const json = this.decrypt(info.data.data)
+    return { cdn, json: this.decrypt(info.data.data) }
+  },
 
-    const format =
-      json.video_formats.find(v => v.quality === 720) ||
-      json.video_formats.find(v => v.quality === 480) ||
-      json.video_formats[0]
-
-    if (!format) throw new Error("SaveTube sin formato")
-
-    const dl = await axios.post(
+  async getDownload(cdn, json, format, signal) {
+    const res = await axios.post(
       `https://${cdn}/download`,
       {
         id: json.id,
@@ -77,13 +66,16 @@ const savetube = {
       { signal }
     )
 
-    const urlDl = dl.data?.data?.downloadUrl
-    if (!urlDl) throw new Error("SaveTube sin url")
+    const url = res.data?.data?.downloadUrl
+    if (!url) throw new Error("SaveTube no url")
+    return url
+  },
 
-    return {
-      title: json.title,
-      url: urlDl
-    }
+  async method(url, selector, signal) {
+    const { cdn, json } = await this.getInfo(url, signal)
+    const format = selector(json)
+    if (!format) throw new Error("Formato no disponible")
+    return this.getDownload(cdn, json, format, signal)
   }
 }
 
@@ -164,22 +156,23 @@ const handler = async (msg, { conn, args, usedPrefix, command }) => {
 
   const caption = `🎬 *${video.title}*\n⏱ ${video.timestamp}`
 
-  const controllers = [
-    new AbortController(),
-    new AbortController(),
-    new AbortController()
-  ]
+  const controllers = Array.from({ length: 8 }, () => new AbortController())
 
   const tasks = [
     sendFast(conn, msg, video, caption, controllers[0].signal),
     sendSafe(conn, msg, video, caption, controllers[1].signal),
-    savetube.download(video.url, controllers[2].signal).then(r =>
-      conn.sendMessage(
-        msg.chat,
-        { video: { url: r.url }, mimetype: "video/mp4", caption },
-        { quoted: msg }
-      )
-    )
+
+    savetube.method(video.url, j => j.video_formats.find(v => v.hasAudio), controllers[2].signal)
+      .then(url => conn.sendMessage(msg.chat, { video: { url }, mimetype: "video/mp4", caption }, { quoted: msg })),
+
+    savetube.method(video.url, j => j.video_formats[0], controllers[3].signal)
+      .then(url => conn.sendMessage(msg.chat, { video: { url }, mimetype: "video/mp4", caption }, { quoted: msg })),
+
+    savetube.method(video.url, j => j.video_formats.find(v => !v.hasAudio), controllers[4].signal)
+      .then(url => conn.sendMessage(msg.chat, { video: { url }, mimetype: "video/mp4", caption }, { quoted: msg })),
+
+    savetube.method(video.url, j => j.video_formats.at(-1), controllers[5].signal)
+      .then(url => conn.sendMessage(msg.chat, { video: { url }, mimetype: "video/mp4", caption }, { quoted: msg }))
   ]
 
   await Promise.race(tasks).finally(() => {
