@@ -22,6 +22,8 @@ const {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
+global.groupMetadata = new Map()
+
 const SESSION_DIR = global.sessions || 'sessions'
 const { state, saveCreds } = await useMultiFileAuthState(SESSION_DIR)
 const { version } = await fetchLatestBaileysVersion()
@@ -129,6 +131,23 @@ async function startSock() {
   global.conn = sock
   store.bind(sock)
 
+  const groups = await sock.groupFetchAllParticipating()
+  for (const jid in groups) {
+    global.groupMetadata.set(jid, groups[jid])
+  }
+
+  sock.ev.on('groups.update', async updates => {
+    for (const u of updates) {
+      const meta = await sock.groupMetadata(u.id).catch(() => null)
+      if (meta) global.groupMetadata.set(u.id, meta)
+    }
+  })
+
+  sock.ev.on('group-participants.update', async u => {
+    const meta = await sock.groupMetadata(u.id).catch(() => null)
+    if (meta) global.groupMetadata.set(u.id, meta)
+  })
+
   sock.ev.on('creds.update', saveCreds)
 
   let pairingRequested = false
@@ -139,25 +158,6 @@ async function startSock() {
     if (connection === 'open') {
       global.BOT_NUMBER = sock.user.id.replace(/\D/g, '')
       console.log(chalk.greenBright('✿ Conectado'))
-
-      const file = './lastRestarter.json'
-      if (fs.existsSync(file)) {
-        try {
-          const data = JSON.parse(fs.readFileSync(file, 'utf-8'))
-          if (data?.chatId && data?.key) {
-            await sock.sendMessage(
-              data.chatId,
-              {
-                text: `✅ *${global.namebot} está en línea nuevamente* 🚀`,
-                edit: data.key
-              }
-            )
-          }
-          fs.unlinkSync(file)
-        } catch (e) {
-          console.error(e)
-        }
-      }
     }
 
     if (
@@ -181,10 +181,7 @@ async function startSock() {
     const reason = lastDisconnect?.error?.output?.statusCode
 
     if (connection === 'close') {
-      if (reason === DisconnectReason.loggedOut) {
-        console.log(chalk.red('Sesión cerrada'))
-        process.exit(0)
-      }
+      if (reason === DisconnectReason.loggedOut) process.exit(0)
       setTimeout(startSock, 2000)
     }
   }
@@ -214,10 +211,5 @@ async function startSock() {
 await loadPlugins(pluginRoot)
 await startSock()
 
-process.on('uncaughtException', err => {
-  console.error('[UNCAUGHT]', err)
-})
-
-process.on('unhandledRejection', err => {
-  console.error('[UNHANDLED]', err)
-})
+process.on('uncaughtException', err => console.error(err))
+process.on('unhandledRejection', err => console.error(err))
