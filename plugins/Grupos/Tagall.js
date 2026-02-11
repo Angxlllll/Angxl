@@ -32,11 +32,11 @@ const countryFlags = {
   }
 
 const prefixes = Object.keys(countryFlags).sort((a, b) => b.length - a.length)
-const flagCache = new Map()
+const cache = new Map()
 
 const getFlag = jid => {
   const num = jid.split('@')[0]
-  if (flagCache.has(num)) return flagCache.get(num)
+  if (cache.has(num)) return cache.get(num)
 
   let flag = '🏳️'
   for (const p of prefixes) {
@@ -45,29 +45,35 @@ const getFlag = jid => {
       break
     }
   }
-  flagCache.set(num, flag)
+  cache.set(num, flag)
   return flag
 }
 
-const handler = async (m, { conn, participants }) => {
-  const emoji = '┊»'
+const handler = async (m, { conn }) => {
+  if (!m.isGroup) return
+
+  const meta = await conn.groupMetadata(m.chat)
+  const participants = meta?.participants || []
+
+  if (!Array.isArray(participants) || !participants.length) return
 
   await conn.sendMessage(m.chat, {
-    react: { text: "🔥", key: m.key }
+    react: { text: '🔥', key: m.key }
   })
 
   const lines = []
   const mentions = []
 
   for (const p of participants) {
-    const jid = p.jid || p.id
+    const jid = decodeJid(p.id || p.jid)
+    if (!jid.endsWith('@s.whatsapp.net')) continue
+
     mentions.push(jid)
-    lines.push(`${emoji} ${getFlag(jid)} @${jid.split('@')[0]}`)
+    lines.push(`┊» ${getFlag(jid)} @${jid.split('@')[0]}`)
   }
 
-  const text =
-`*!  MENCION GENERAL  !*
-*PARA ${participants.length} MIEMBROS* 🗣️
+  const text = `*!  MENCION GENERAL  !*
+*PARA ${mentions.length} MIEMBROS* 🗣️
 
 ${lines.join('\n')}`
 
