@@ -1,4 +1,5 @@
-import { decodeJid } from "@whiskeysockets/baileys"
+import baileys from "@whiskeysockets/baileys"
+const { decodeJid } = baileys
 
 Error.stackTraceLimit = 0
 
