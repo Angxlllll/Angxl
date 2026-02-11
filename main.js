@@ -10,6 +10,7 @@ import { fileURLToPath } from 'url'
 
 import * as baileys from '@whiskeysockets/baileys'
 import store from './lib/store.js'
+import { GROUP_CACHE } from './handler.js'
 
 const {
   makeWASocket,
@@ -109,6 +110,10 @@ async function startSock() {
 
   global.conn = sock
   store.bind(sock)
+
+  sock.ev.on('group-participants.update', ({ id }) => {
+    GROUP_CACHE.delete(id)
+  })
 
   let pairingRequested = false
 
