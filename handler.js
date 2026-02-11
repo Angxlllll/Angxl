@@ -18,7 +18,7 @@ const FAIL = {
 global.dfail = (t, m, c) =>
   FAIL[t] && c.sendMessage(m.chat, { text: FAIL[t] }, { quoted: m })
 
-const GROUP_CACHE = new Map()
+export const GROUP_CACHE = new Map()
 const TTL = 30_000
 
 async function getGroupInfo(conn, jid) {
