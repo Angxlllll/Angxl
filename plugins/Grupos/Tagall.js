@@ -52,7 +52,9 @@ const getFlag = jid => {
 const handler = async (m, { conn, participants }) => {
   const emoji = '┊»'
 
-  await m.react('🗣️')
+  await conn.sendMessage(m.chat, {
+    react: { text: "🔥", key: m.key }
+  })
 
   const lines = []
   const mentions = []
