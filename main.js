@@ -1,21 +1,20 @@
-import './config.js'
+import "./config.js"
 
-import fs from 'fs'
-import path from 'path'
-import readline from 'readline'
-import chalk from 'chalk'
-import pino from 'pino'
-import NodeCache from 'node-cache'
-import { fileURLToPath } from 'url'
+import fs from "fs"
+import path from "path"
+import readline from "readline"
+import chalk from "chalk"
+import pino from "pino"
+import NodeCache from "node-cache"
+import { fileURLToPath } from "url"
 
-import * as baileys from '@whiskeysockets/baileys'
-import store from './lib/store.js'
+import baileys from "@whiskeysockets/baileys"
+import store from "./lib/store.js"
 
 const {
   makeWASocket,
   DisconnectReason,
   useMultiFileAuthState,
-  fetchLatestBaileysVersion,
   makeCacheableSignalKeyStore
 } = baileys
 
@@ -25,9 +24,8 @@ global.groupMetadata = new Map()
 global.plugins = Object.create(null)
 global.COMMAND_MAP = new Map()
 
-const SESSION_DIR = global.sessions || 'sessions'
+const SESSION_DIR = global.sessions || "sessions"
 const { state, saveCreds } = await useMultiFileAuthState(SESSION_DIR)
-const { version } = await fetchLatestBaileysVersion()
 
 const msgRetryCounterCache = new NodeCache({ stdTTL: 30 })
 const userDevicesCache = new NodeCache({ stdTTL: 120 })
@@ -39,31 +37,29 @@ const rl = readline.createInterface({
 
 const question = q => new Promise(r => rl.question(q, r))
 
-let option = process.argv.includes('qr') ? '1' : null
+let option = process.argv.includes("qr") ? "1" : null
 let phoneNumber = global.botNumber
 
 if (!option && !phoneNumber && !fs.existsSync(`./${SESSION_DIR}/creds.json`)) {
   do {
     option = await question(
-      chalk.bold.white('Seleccione una opción:\n') +
-      chalk.blue('1. Código QR\n') +
-      chalk.cyan('2. Código de texto\n--> ')
+      chalk.bold.white("Seleccione una opción:\n") +
+      chalk.blue("1. Código QR\n") +
+      chalk.cyan("2. Código de texto\n--> ")
     )
   } while (!/^[12]$/.test(option))
 }
 
-const pluginRoot = path.join(__dirname, 'plugins')
+const pluginRoot = path.join(__dirname, "plugins")
 
 function rebuildPluginIndex() {
   global.COMMAND_MAP.clear()
 
   for (const plugin of Object.values(global.plugins)) {
     if (!plugin || plugin.disabled) continue
-
     let cmds = plugin.command
     if (!cmds) continue
     if (!Array.isArray(cmds)) cmds = [cmds]
-
     for (const c of cmds) {
       global.COMMAND_MAP.set(c.toLowerCase(), plugin)
     }
@@ -75,7 +71,7 @@ async function loadPlugins(dir) {
     const full = path.join(dir, f)
     if (fs.statSync(full).isDirectory()) {
       await loadPlugins(full)
-    } else if (f.endsWith('.js')) {
+    } else if (f.endsWith(".js")) {
       const m = await import(`${full}?update=${Date.now()}`)
       global.plugins[full] = m.default || m
     }
@@ -83,18 +79,19 @@ async function loadPlugins(dir) {
   rebuildPluginIndex()
 }
 
-let handler = await import('./handler.js')
+const handler = await import("./handler.js")
 
 async function startSock() {
   const sock = makeWASocket({
-    logger: pino({ level: 'silent' }),
-    printQRInTerminal: option === '1',
-    browser: option === '2'
-      ? ['Android', 'Chrome', '13']
-      : ['Desktop', 'Chrome', '120'],
+    logger: pino({ level: "silent" }),
+    printQRInTerminal: option === "1",
+    browser: ["Android", "Chrome", "120"],
     auth: {
       creds: state.creds,
-      keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'fatal' }))
+      keys: makeCacheableSignalKeyStore(
+        state.keys,
+        pino({ level: "fatal" })
+      )
     },
     syncFullHistory: false,
     markOnlineOnConnect: false,
@@ -102,7 +99,6 @@ async function startSock() {
     generateHighQualityLinkPreview: false,
     msgRetryCounterCache,
     userDevicesCache,
-    version,
     keepAliveIntervalMs: 55000,
     getMessage: async () => undefined
   })
@@ -110,45 +106,41 @@ async function startSock() {
   global.conn = sock
   store.bind(sock)
 
-  sock.ev.on('group-participants.update', ({ id }) => {
-    GROUP_CACHE.delete(id)
-  })
-
   let pairingRequested = false
 
-  sock.ev.on('creds.update', saveCreds)
+  sock.ev.on("creds.update", saveCreds)
 
-  sock.ev.on('messages.upsert', ({ messages, type }) => {
-    if (type !== 'notify') return
+  sock.ev.on("messages.upsert", ({ messages, type }) => {
+    if (type !== "notify") return
     if (!messages?.length) return
     handler.handler.call(sock, { messages })
   })
 
-  sock.ev.on('connection.update', async update => {
+  sock.ev.on("connection.update", async update => {
     const { connection, lastDisconnect } = update
     const reason = lastDisconnect?.error?.output?.statusCode
 
     if (
-      option === '2' &&
+      option === "2" &&
       !pairingRequested &&
       !fs.existsSync(`./${SESSION_DIR}/creds.json`) &&
-      (connection === 'connecting' || connection === 'open')
+      (connection === "connecting" || connection === "open")
     ) {
       pairingRequested = true
-      console.log(chalk.cyanBright('\nIngresa tu número con código país'))
-      phoneNumber = await question('--> ')
-      const code = await sock.requestPairingCode(phoneNumber.replace(/\D/g, ''))
-      console.log(chalk.greenBright('\nCódigo de vinculación:\n'))
-      console.log(chalk.bold(code.match(/.{1,4}/g).join(' ')))
+      console.log(chalk.cyanBright("\nIngresa tu número con código país"))
+      phoneNumber = await question("--> ")
+      const code = await sock.requestPairingCode(
+        phoneNumber.replace(/\D/g, "")
+      )
+      console.log(chalk.greenBright("\nCódigo de vinculación:\n"))
+      console.log(chalk.bold(code.match(/.{1,4}/g).join(" ")))
     }
 
-    if (connection === 'open') {
-      console.log(chalk.greenBright('✿ Conectado'))
-      const groups = await sock.groupFetchAllParticipating()
-      for (const jid in groups) global.groupMetadata.set(jid, groups[jid])
+    if (connection === "open") {
+      console.log(chalk.greenBright("✿ Conectado"))
     }
 
-    if (connection === 'close') {
+    if (connection === "close") {
       if (reason === DisconnectReason.loggedOut) process.exit(0)
       setTimeout(startSock, 2000)
     }
@@ -158,5 +150,5 @@ async function startSock() {
 await loadPlugins(pluginRoot)
 await startSock()
 
-process.on('uncaughtException', console.error)
-process.on('unhandledRejection', console.error)
+process.on("uncaughtException", console.error)
+process.on("unhandledRejection", console.error)
