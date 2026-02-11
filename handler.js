@@ -1,69 +1,6 @@
-import baileys from "@whiskeysockets/baileys"
-const { decodeJid } = baileys
+import { smsg, all } from "./lib/simple.js"
 
 Error.stackTraceLimit = 0
-
-const DIGITS = s => String(s || "").replace(/\D/g, "")
-
-function lidParser(participants = []) {
-  try {
-    return participants.map(v => ({
-      id: (typeof v?.id === "string" && v.id.endsWith("@lid") && v.jid) ? v.jid : v.id,
-      admin: v?.admin ?? null,
-      raw: v
-    }))
-  } catch {
-    return participants || []
-  }
-}
-
-async function isAdminByNumber(conn, chatId, number) {
-  try {
-    const meta = await conn.groupMetadata(chatId)
-    const raw = Array.isArray(meta?.participants) ? meta.participants : []
-    const norm = lidParser(raw)
-
-    for (let i = 0; i < raw.length; i++) {
-      const r = raw[i]
-      const n = norm[i]
-      const isAdm =
-        r?.admin === "admin" ||
-        r?.admin === "superadmin" ||
-        n?.admin === "admin" ||
-        n?.admin === "superadmin"
-
-      if (!isAdm) continue
-
-      const ids = [r?.id, r?.jid, n?.id]
-      if (ids.some(x => DIGITS(x) === number)) return true
-    }
-    return false
-  } catch {
-    return false
-  }
-}
-
-async function isBotAdminReal(conn, chatId) {
-  try {
-    const meta = await conn.groupMetadata(chatId)
-    const raw = Array.isArray(meta?.participants) ? meta.participants : []
-    const norm = lidParser(raw)
-    const botJid = decodeJid(conn.user?.id || "")
-    const idx = norm.findIndex(p => p?.id === botJid)
-    if (idx < 0) return false
-
-    const r = raw[idx]
-    const n = norm[idx]
-    return (
-      r?.admin === "admin" ||
-      r?.admin === "superadmin" ||
-      n?.admin === "admin" ||
-      n?.admin === "superadmin"
-    )
-  } catch {
-    return false
-  }
-}
 
 const FAIL = {
   rowner: "Solo el owner",
@@ -72,98 +9,69 @@ const FAIL = {
   botAdmin: "Necesito admin"
 }
 
-global.dfail = (t, m, c) =>
-  FAIL[t] && c.sendMessage(m.chat, { text: FAIL[t] }, { quoted: m })
+global.dfail = (type, m, conn) =>
+  FAIL[type] &&
+  conn.sendMessage(
+    m.chat,
+    { text: FAIL[type] },
+    { quoted: m }
+  )
 
 export async function handler(update) {
-  const msgs = update?.messages
-  if (!msgs) return
+  const messages = update?.messages
+  if (!messages || !Array.isArray(messages)) return
 
-  for (const raw of msgs) {
-    if (!raw.message) continue
+  for (const raw of messages) {
+    if (!raw?.message) continue
     if (raw.key?.remoteJid === "status@broadcast") continue
     await process.call(this, raw)
   }
 }
 
 async function process(raw) {
-  const msg = raw.message
-  const key = raw.key
-  const chatId = key.remoteJid
-  const fromMe = !!key.fromMe
+  const m = await smsg(this, raw)
+  if (!m || m.isBaileys) return
 
-  if (!msg) return
+  all(m)
 
-  const type = Object.keys(msg)[0]
-  const content = msg[type]
+  if (!m.text) return
 
-  let text = ""
-  if (type === "conversation") text = content
-  else if (type === "extendedTextMessage") text = content.text
-  else if (type === "imageMessage" || type === "videoMessage") text = content.caption || ""
-
-  if (!text) return
-
-  const prefix = text[0]
+  const prefix = m.text[0]
   if (prefix !== "." && prefix !== "!") return
 
-  const body = text.slice(1).trim()
+  const body = m.text.slice(1).trim()
   if (!body) return
 
-  const [cmd, ...args] = body.split(/\s+/)
-  const command = cmd.toLowerCase()
+  const parts = body.split(/\s+/)
+  const command = parts.shift().toLowerCase()
+  const args = parts
 
   const plugin = global.COMMAND_MAP.get(command)
   if (!plugin || plugin.disabled) return
 
-  const senderJid = key.participant || chatId
-  const senderNo = DIGITS(senderJid)
+  if (plugin.rowner && !m.isROwner)
+    return global.dfail("rowner", m, this)
 
-  const owners = global.owner || []
-  const isROwner =
-    Array.isArray(owners) &&
-    owners.some(o => DIGITS(Array.isArray(o) ? o[0] : o) === senderNo)
+  if (plugin.owner && !m.isOwner)
+    return global.dfail("owner", m, this)
 
-  const isOwner = isROwner
-  const isGroup = chatId.endsWith("@g.us")
+  if (plugin.admin && !m.isAdmin && !m.fromMe)
+    return global.dfail("admin", m, this)
 
-  let isAdmin = false
-  let isBotAdmin = false
-
-  if (isGroup) {
-    isAdmin = isOwner || await isAdminByNumber(this, chatId, senderNo)
-    isBotAdmin = isOwner || await isBotAdminReal(this, chatId)
-  }
-
-  if (plugin.rowner && !isROwner)
-    return global.dfail("rowner", { chat: chatId }, this)
-
-  if (plugin.owner && !isOwner)
-    return global.dfail("owner", { chat: chatId }, this)
-
-  if (plugin.admin && !isAdmin && !fromMe)
-    return global.dfail("admin", { chat: chatId }, this)
-
-  if (plugin.botAdmin && !isBotAdmin)
-    return global.dfail("botAdmin", { chat: chatId }, this)
+  if (plugin.botAdmin && !m.isBotAdmin)
+    return global.dfail("botAdmin", m, this)
 
   const exec = plugin.exec || plugin.default || plugin
   if (!exec) return
 
-  await exec.call(this, {
-    key,
-    chat: chatId,
-    sender: senderJid,
-    text,
-    message: msg
-  }, {
+  await exec.call(this, m, {
     conn: this,
     args,
     command,
     usedPrefix: prefix,
-    isROwner,
-    isOwner,
-    isAdmin,
-    isBotAdmin
+    isROwner: m.isROwner,
+    isOwner: m.isOwner,
+    isAdmin: m.isAdmin,
+    isBotAdmin: m.isBotAdmin
   })
 }
